@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -46,10 +47,19 @@ class OpenAILLMClient:
     def __init__(self) -> None:
         settings = get_settings()
         self._model = settings.llm_model
-        kwargs: dict[str, Any] = {"api_key": settings.llm_api_key}
-        if settings.llm_base_url:
-            kwargs["base_url"] = settings.llm_base_url
-        self._client = AsyncOpenAI(**kwargs)
+        self._settings = settings
+        self._client: AsyncOpenAI | None = None
+
+    def _get_client(self) -> AsyncOpenAI:
+        if self._client is None:
+            settings = self._settings
+            if not settings.llm_api_key:
+                raise RuntimeError("LLM_API_KEY is not set")
+            kwargs: dict[str, Any] = {"api_key": settings.llm_api_key}
+            if settings.llm_base_url:
+                kwargs["base_url"] = settings.llm_base_url
+            self._client = AsyncOpenAI(**kwargs)
+        return self._client
 
     async def complete(
         self,
@@ -68,7 +78,7 @@ class OpenAILLMClient:
             for t in tools
         ]
 
-        response = await self._client.chat.completions.create(
+        response = await self._get_client().chat.completions.create(
             model=self._model,
             messages=messages,
             tools=tool_specs if tool_specs else None,
@@ -80,8 +90,6 @@ class OpenAILLMClient:
             name = tc.function.name
             arguments = {}
             if tc.function.arguments:
-                import json
-
                 try:
                     arguments = json.loads(tc.function.arguments)
                 except json.JSONDecodeError as exc:
@@ -94,4 +102,5 @@ class OpenAILLMClient:
         return LLMResponse(text=message.content or "")
 
     async def close(self) -> None:
-        await self._client.close()
+        if self._client is not None:
+            await self._client.close()
