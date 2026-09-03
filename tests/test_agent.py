@@ -159,3 +159,37 @@ async def test_unknown_tool_argument_error_relayed() -> None:
     await agent.handle("do thing")
     last_tool_msgs = [m["content"] for m in llm.calls[-1][0]]
     assert any("Argument error" in m for m in last_tool_msgs)
+
+
+@pytest.mark.asyncio
+async def test_tool_calls_preceded_by_assistant_message() -> None:
+    assistant_message = {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_123",
+                "type": "function",
+                "function": {
+                    "name": "list_scheduled_checks",
+                    "arguments": "{}",
+                },
+            }
+        ],
+    }
+    llm = FakeLLM(
+        [
+            LLMResponse(
+                tool_calls=[ToolCall(name="list_scheduled_checks", arguments={}, tool_call_id="call_123")],
+                assistant_message=assistant_message,
+            ),
+            LLMResponse(text="ok"),
+        ]
+    )
+    agent = make_agent(llm, FakeMCP([]))
+    await agent.handle("show checks")
+    sent = llm.calls[-1][0]
+    assert sent[2] == assistant_message
+    assert sent[3]["role"] == "tool"
+    assert sent[3]["tool_call_id"] == "call_123"
+    assert "tool_call_id" in sent[3]

@@ -86,20 +86,47 @@ class Agent:
             if not response.wants_tool:
                 return response.text or ""
 
+            if response.assistant_message is not None:
+                messages.append(dict(response.assistant_message))
+
             for call in response.tool_calls:
                 try:
                     result_text = await self._dispatch(call.name, call.arguments)
                 except MCPError as exc:
-                    messages.append({"role": "tool", "content": mcp_error_message(exc)})
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call.tool_call_id,
+                            "content": mcp_error_message(exc),
+                        }
+                    )
                     continue
                 except ToolArgumentError as exc:
-                    messages.append({"role": "tool", "content": f"Argument error: {exc}"})
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call.tool_call_id,
+                            "content": f"Argument error: {exc}",
+                        }
+                    )
                     continue
                 except ValueError as exc:
-                    messages.append({"role": "tool", "content": f"Error: {exc}"})
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": call.tool_call_id,
+                            "content": f"Error: {exc}",
+                        }
+                    )
                     continue
 
-                messages.append({"role": "tool", "content": result_text})
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": call.tool_call_id,
+                        "content": result_text,
+                    }
+                )
 
         return "I couldn't complete that request in the allowed number of steps. Try being more specific."
 

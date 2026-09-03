@@ -16,12 +16,14 @@ log = get_logger("agent.llm")
 class ToolCall:
     name: str
     arguments: dict[str, Any]
+    tool_call_id: str = ""
 
 
 @dataclass(frozen=True)
 class LLMResponse:
     text: str | None = None
     tool_calls: list[ToolCall] = field(default_factory=list)
+    assistant_message: dict[str, Any] | None = None
 
     @property
     def wants_tool(self) -> bool:
@@ -95,10 +97,15 @@ class OpenAILLMClient:
                 except json.JSONDecodeError as exc:
                     log.warning("failed to parse tool arguments for {}: {}", name, exc)
                     arguments = {}
-            tool_calls.append(ToolCall(name=name, arguments=arguments))
+            tool_calls.append(
+                ToolCall(name=name, arguments=arguments, tool_call_id=tc.id or "")
+            )
 
         if tool_calls:
-            return LLMResponse(tool_calls=tool_calls)
+            return LLMResponse(
+                tool_calls=tool_calls,
+                assistant_message=message.model_dump(exclude_none=True),
+            )
         return LLMResponse(text=message.content or "")
 
     async def close(self) -> None:
