@@ -1,0 +1,37 @@
+from __future__ import annotations
+
+from loguru import logger
+
+from app.config import load_config
+from app.logging import _redact_message
+from app.settings import get_settings, redact
+
+
+def test_load_config() -> None:
+    cfg = load_config("config.json")
+    assert cfg.telegram.allowed_user_id == 123456789
+    assert cfg.agent.max_iterations == 5
+    assert "dokploy" in cfg.mcp.servers
+    assert cfg.mcp.servers["dokploy"].command == "npx"
+    assert cfg.scheduler.enabled is True
+
+
+def test_redact() -> None:
+    assert redact("") == ""
+    assert redact("short") == "***"
+    out = redact("abcdefghijklmnop")
+    assert out == "abcd***mnop"
+    assert "abcdefghij" not in out
+
+
+def test_redaction_masks_secrets() -> None:
+    settings = get_settings()
+    settings.telegram_bot_token = "abcdefghijklmnop"
+    masked = _redact_message("token=abcdefghijklmnop end")
+    assert "abcdefghijkl" not in masked
+    assert "abcd***mnop" in masked
+
+
+def test_logger_is_bound() -> None:
+    bound = logger.bind(name="test.sub")
+    assert bound is not None

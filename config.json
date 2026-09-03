@@ -1,0 +1,22 @@
+{
+  "telegram": {
+    "allowed_user_id": 123456789
+  },
+  "agent": {
+    "max_iterations": 5
+  },
+  "mcp": {
+    "servers": {
+      "dokploy": {
+        "command": "npx",
+        "args": [
+          "-y",
+          "dokploy-mcp"
+        ]
+      }
+    }
+  },
+  "scheduler": {
+    "enabled": true
+  }
+}
