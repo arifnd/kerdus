@@ -42,3 +42,20 @@ def test_health_and_ready(config_path, state_path) -> None:
         assert ready.status_code == 200
         body = ready.json()
         assert body["status"] in {"ready", "not_ready"}
+
+
+def test_config_reload_endpoint(config_path, state_path) -> None:
+    app = create_app(config_path=config_path, state_path=state_path)
+    with TestClient(app) as client:
+        resp = client.post("/config/reload")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "message": "config reloaded"}
+
+
+def test_config_reload_endpoint_corrupt(config_path, state_path) -> None:
+    app = create_app(config_path=config_path, state_path=state_path)
+    with TestClient(app) as client:
+        config_path.write_text("{ not json", encoding="utf-8")
+        resp = client.post("/config/reload")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "error"

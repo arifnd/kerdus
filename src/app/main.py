@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 
 from .agent.agent import build_agent
 from .agent.llm import OpenAILLMClient
-from .config import load_config
+from .config import AppConfig
+from .config_manager import ConfigManager
 from .logging import get_logger, setup_logging
 from .mcp.client import MCPServerManager
 from .scheduler.scheduler import SchedulerService
@@ -23,17 +24,25 @@ class AppContext:
         self.agent = None
         self.telegram: TelegramBot | None = None
         self.ready = False
+        self.config_manager: ConfigManager | None = None
 
 
 def create_app(
     config_path: str | Path = "config.json",
     state_path: str | Path = "data/schedules.json",
+    poll_interval: float = 5.0,
 ) -> FastAPI:
     setup_logging()
-    config = load_config(config_path)
     ctx = AppContext()
 
+    def on_config_change(old: AppConfig, new: AppConfig) -> None:
+        _apply_config_change(ctx, old, new)
+
     async def lifespan(app: FastAPI):
+        ctx.config_manager = ConfigManager(config_path=config_path, poll_interval=poll_interval)
+        ctx.config_manager.on_change(on_config_change)
+        config = ctx.config_manager.config
+
         ctx.llm = OpenAILLMClient()
 
         await ctx.mcp.connect_all(config.mcp.servers)
@@ -61,8 +70,11 @@ def create_app(
             log.error("failed to start telegram bot: {}", exc)
             ctx.ready = False
 
+        ctx.config_manager.start_polling()
+
         yield
 
+        await ctx.config_manager.stop_polling()
         await ctx.telegram.stop() if ctx.telegram else None
         if ctx.scheduler:
             ctx.scheduler.shutdown()
@@ -86,7 +98,42 @@ def create_app(
             "mcp": len(await ctx.mcp.list_tools()) > 0,
         }
 
+    @app.post("/config/reload")
+    async def reload_config(request: Request) -> dict:
+        if ctx.config_manager is None:
+            return {"status": "error", "message": "config manager not initialized"}
+        try:
+            ctx.config_manager.reload()
+            return {"status": "ok", "message": "config reloaded"}
+        except Exception as exc:  # noqa: BLE001 - endpoint isolation
+            return {"status": "error", "message": str(exc)}
+
     return app
+
+
+def _apply_config_change(ctx: AppContext, old: AppConfig, new: AppConfig) -> None:
+    if old.telegram.allowed_user_id != new.telegram.allowed_user_id:
+        log.info("telegram allowed_user_id changed: {} -> {}", old.telegram.allowed_user_id, new.telegram.allowed_user_id)
+        if ctx.telegram:
+            ctx.telegram._config = new.telegram
+
+    if old.agent.max_iterations != new.agent.max_iterations:
+        log.info("agent max_iterations changed: {} -> {}", old.agent.max_iterations, new.agent.max_iterations)
+        if ctx.agent:
+            ctx.agent._max_iterations = new.agent.max_iterations
+
+    if old.mcp.servers != new.mcp.servers:
+        log.warning("mcp servers changed; server reconnect requires restart")
+
+    if old.scheduler.enabled != new.scheduler.enabled:
+        log.info("scheduler enabled changed: {} -> {}", old.scheduler.enabled, new.scheduler.enabled)
+        if ctx.scheduler:
+            if new.scheduler.enabled and not old.scheduler.enabled:
+                ctx.scheduler.start()
+                log.info("scheduler enabled and started")
+            elif not new.scheduler.enabled and old.scheduler.enabled:
+                ctx.scheduler.shutdown()
+                log.info("scheduler disabled and stopped")
 
 
 app = create_app()

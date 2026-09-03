@@ -102,6 +102,29 @@ Mount `data/` as a volume to persist scheduled jobs across restarts:
 docker run -p 8000:8000 --env-file .env -v $(pwd)/data:/app/data kerdus
 ```
 
+## Dynamic configuration
+
+`config.json` is hot-reloaded two ways, so a mounted volume changes are picked
+up without a restart:
+
+1. **Polling** — the config file is checked for changes every 5 seconds and
+   applied if it changed.
+2. **Manual trigger** — `POST /config/reload` reloads the file on demand.
+
+~Changes to `telegram.allowed_user_id`, `agent.max_iterations`, and
+`scheduler.enabled` take effect immediately. Changing `mcp.servers` requires a
+restart, since connected MCP servers are only established at startup.
+
+~Note: only `data/` needs to be a mounted volume for scheduling state. If you
+want to hot-edit `config.json` from the host, mount it too:
+
+```bash
+docker run -p 8000:8000 --env-file .env \
+  -v $(pwd)/data:/app/data \
+  -v $(pwd)/config.json:/app/config.json \
+  kerdus
+```
+
 ## Usage
 
 Message your Telegram bot:
