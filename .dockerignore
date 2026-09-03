@@ -8,6 +8,6 @@ data/
 tasks/
 tests/
 *.md
+!README.md
 .gitignore
 .python-version
-uv.lock
