@@ -1,17 +1,30 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from telegram import Update
 from telegram.ext import Application, ApplicationBuilder, ContextTypes, MessageHandler, filters
 
 from ..config import TelegramConfig
+from ..formatter import markdown_to_telegram_html
 from ..logging import get_logger
 from ..settings import get_settings
 
 log = get_logger("telegram")
 
 AgentHandler = Callable[[str], Awaitable[str]]
+
+
+async def _send_formatted(
+    send_fn: Callable[..., Awaitable[Any]], text: str
+) -> None:
+    """Send *text* as formatted HTML, falling back to plain text on failure."""
+    html = markdown_to_telegram_html(text)
+    try:
+        await send_fn(html, parse_mode="HTML")
+    except Exception:  # noqa: BLE001 – invalid markup, fall back
+        await send_fn(text)
 
 
 class TelegramBot:
@@ -34,7 +47,7 @@ class TelegramBot:
         self._chat_id = message.chat_id
         try:
             reply = await self._handle_message(message.text)
-            await message.reply_text(reply)
+            await _send_formatted(message.reply_text, reply)
         except Exception as exc:  # noqa: BLE001 - never crash the handler
             log.error("agent handler error: {}", exc)
             await message.reply_text("I couldn't complete that request right now.")
@@ -62,7 +75,12 @@ class TelegramBot:
             return
         chat_id = self._chat_id or self._config.allowed_user_id
         try:
-            await self._application.bot.send_message(chat_id=chat_id, text=text)
+            await _send_formatted(
+                lambda t, **kw: self._application.bot.send_message(
+                    chat_id=chat_id, text=t, **kw
+                ),
+                text,
+            )
         except Exception as exc:  # noqa: BLE001 - alert failures are non-fatal
             log.error("failed to send alert: {}", exc)
 
