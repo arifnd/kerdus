@@ -62,6 +62,7 @@ def create_app(
             config=config.telegram,
             handle_message=ctx.agent.handle,
         )
+        ctx.telegram.set_processing_hint(config.agent.processing_hint)
         try:
             await ctx.telegram.start()
             ctx.ready = True
@@ -115,7 +116,12 @@ def _apply_config_change(ctx: AppContext, old: AppConfig, new: AppConfig) -> Non
     if old.telegram.allowed_user_id != new.telegram.allowed_user_id:
         log.info("telegram allowed_user_id changed: {} -> {}", old.telegram.allowed_user_id, new.telegram.allowed_user_id)
         if ctx.telegram:
-            ctx.telegram._config = new.telegram
+            ctx.telegram.set_config(new.telegram)
+
+    if old.agent.processing_hint != new.agent.processing_hint:
+        log.info("agent processing_hint changed: {} -> {}", old.agent.processing_hint, new.agent.processing_hint)
+        if ctx.telegram:
+            ctx.telegram.set_processing_hint(new.agent.processing_hint)
 
     if old.agent.max_iterations != new.agent.max_iterations:
         log.info("agent max_iterations changed: {} -> {}", old.agent.max_iterations, new.agent.max_iterations)

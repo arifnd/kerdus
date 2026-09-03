@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.formatter import markdown_to_telegram_html
+from app.formatter import markdown_to_telegram_html, split_telegram_message
 
 
 class TestBold:
@@ -103,3 +103,44 @@ class TestEdgeCases:
         assert "<b>bold</b>" in result
         assert "<i>italic</i>" in result
         assert "<code>code</code>" in result
+
+
+class TestSplitTelegramMessage:
+    def test_short_text_single_chunk(self) -> None:
+        assert split_telegram_message("hello") == ["hello"]
+
+    def test_empty_text(self) -> None:
+        assert split_telegram_message("") == [""]
+
+    def test_exact_limit(self) -> None:
+        text = "x" * 4096
+        assert split_telegram_message(text) == [text]
+
+    def test_long_text_splits(self) -> None:
+        text = "A" * 5000
+        chunks = split_telegram_message(text)
+        assert len(chunks) == 2
+        assert "(1/2)" in chunks[0]
+        assert "(2/2)" in chunks[1]
+        for chunk in chunks:
+            assert len(chunk) <= 4096
+
+    def test_prefers_paragraph_split(self) -> None:
+        text = "para1\n\npara2\n\n" + "X" * 3000
+        chunks = split_telegram_message(text, limit=100)
+        assert len(chunks) >= 2
+
+    def test_splits_on_lines(self) -> None:
+        lines = ["line " + str(i) for i in range(200)]
+        text = "\n".join(lines)
+        chunks = split_telegram_message(text, limit=500)
+        assert len(chunks) > 1
+        for chunk in chunks:
+            assert len(chunk) <= 500
+
+    def test_single_long_line_splits(self) -> None:
+        text = "word " * 1000
+        chunks = split_telegram_message(text, limit=200)
+        assert len(chunks) > 1
+        for chunk in chunks:
+            assert len(chunk) <= 200

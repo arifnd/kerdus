@@ -15,6 +15,7 @@ class TelegramConfig(BaseModel):
 
 class AgentConfig(BaseModel):
     max_iterations: int = Field(default=5, ge=1, le=20)
+    processing_hint: bool = False
 
 
 class MCPServerConfig(BaseModel):

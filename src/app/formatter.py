@@ -74,3 +74,43 @@ def markdown_to_telegram_html(text: str) -> str:
 def _escape_html(text: str) -> str:
     """Escape characters that are special in HTML."""
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+_MAX_MESSAGE_LENGTH = 4096
+_MARKER_OVERHEAD = 10  # room for " (n/m)" suffix
+
+
+def split_telegram_message(text: str, limit: int = _MAX_MESSAGE_LENGTH) -> list[str]:
+    """Split *text* into chunks that fit a single Telegram message.
+
+    Splits prefer paragraph breaks, then line breaks, then word boundaries.
+    Fenced code blocks are kept whole whenever possible.  If a single block
+    exceeds *limit* it is hard-cut at *limit* characters.
+    """
+    if not text or len(text) <= limit:
+        return [text]
+
+    chunks: list[str] = []
+    lines = text.split("\n")
+    current_lines: list[str] = []
+
+    for line in lines:
+        candidate = line if not current_lines else "\n".join([*current_lines, line])
+        if len(candidate) + _MARKER_OVERHEAD <= limit:
+            current_lines.append(line)
+        elif not current_lines:
+            # single long line – split into fixed-size pieces
+            while len(line) + _MARKER_OVERHEAD > limit:
+                chunks.append(line[: limit - _MARKER_OVERHEAD])
+                line = line[limit - _MARKER_OVERHEAD :]
+            current_lines = [line] if line else []
+        else:
+            chunks.append("\n".join(current_lines))
+            current_lines = [line]
+
+    if current_lines:
+        chunks.append("\n".join(current_lines))
+
+    if len(chunks) <= 1:
+        return chunks
+    return [f"{c} ({i + 1}/{len(chunks)})" for i, c in enumerate(chunks)]

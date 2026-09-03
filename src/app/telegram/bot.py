@@ -1,13 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from telegram import Update
+from telegram import Message, Update
 from telegram.ext import Application, ApplicationBuilder, ContextTypes, MessageHandler, filters
 
 from ..config import TelegramConfig
-from ..formatter import markdown_to_telegram_html
+from ..formatter import markdown_to_telegram_html, split_telegram_message
 from ..logging import get_logger
 from ..settings import get_settings
 
@@ -15,16 +16,7 @@ log = get_logger("telegram")
 
 AgentHandler = Callable[[str], Awaitable[str]]
 
-
-async def _send_formatted(
-    send_fn: Callable[..., Awaitable[Any]], text: str
-) -> None:
-    """Send *text* as formatted HTML, falling back to plain text on failure."""
-    html = markdown_to_telegram_html(text)
-    try:
-        await send_fn(html, parse_mode="HTML")
-    except Exception:  # noqa: BLE001 – invalid markup, fall back
-        await send_fn(text)
+_PLACEHOLDER = "\u2026"
 
 
 class TelegramBot:
@@ -33,6 +25,19 @@ class TelegramBot:
         self._handle_message = handle_message
         self._application: Application | None = None
         self._chat_id: int | None = None
+        self._locks: dict[int, asyncio.Lock] = {}
+        self._processing_hint = False
+
+    def set_config(self, config: TelegramConfig) -> None:
+        self._config = config
+
+    def set_processing_hint(self, enabled: bool) -> None:
+        self._processing_hint = enabled
+
+    def _lock_for(self, chat_id: int) -> asyncio.Lock:
+        if chat_id not in self._locks:
+            self._locks[chat_id] = asyncio.Lock()
+        return self._locks[chat_id]
 
     async def _on_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         message = update.effective_message
@@ -45,12 +50,36 @@ class TelegramBot:
             return
 
         self._chat_id = message.chat_id
+        lock = self._lock_for(message.chat_id)
+        async with lock:
+            await self._handle_and_reply(message)
+
+    async def _handle_and_reply(self, message: Message) -> None:
+        placeholder_msg: Message | None = None
         try:
+            if self._processing_hint:
+                placeholder_msg = await message.reply_text(_PLACEHOLDER)
+
             reply = await self._handle_message(message.text)
-            await _send_formatted(message.reply_text, reply)
+
+            chunks = split_telegram_message(reply)
+            if placeholder_msg:
+                await _edit_formatted(placeholder_msg, chunks[0])
+                for chunk in chunks[1:]:
+                    await _send_formatted(message.reply_text, chunk)
+            else:
+                for chunk in chunks:
+                    await _send_formatted(message.reply_text, chunk)
+
         except Exception as exc:  # noqa: BLE001 - never crash the handler
             log.error("agent handler error: {}", exc)
-            await message.reply_text("I couldn't complete that request right now.")
+            try:
+                if placeholder_msg:
+                    await placeholder_msg.edit_text("I couldn't complete that request right now.")
+                else:
+                    await message.reply_text("I couldn't complete that request right now.")
+            except Exception as fallback_exc:  # noqa: BLE001
+                log.debug("failed to send fallback error: {}", fallback_exc)
 
     async def start(self) -> None:
         token = get_settings().telegram_bot_token
@@ -74,15 +103,18 @@ class TelegramBot:
             log.error("cannot send alert: bot not running")
             return
         chat_id = self._chat_id or self._config.allowed_user_id
-        try:
-            await _send_formatted(
-                lambda t, **kw: self._application.bot.send_message(
-                    chat_id=chat_id, text=t, **kw
-                ),
-                text,
-            )
-        except Exception as exc:  # noqa: BLE001 - alert failures are non-fatal
-            log.error("failed to send alert: {}", exc)
+        lock = self._lock_for(chat_id)
+        async with lock:
+            try:
+                for chunk in split_telegram_message(text):
+                    await _send_formatted(
+                        lambda t, **kw: self._application.bot.send_message(
+                            chat_id=chat_id, text=t, **kw
+                        ),
+                        chunk,
+                    )
+            except Exception as exc:  # noqa: BLE001 - alert failures are non-fatal
+                log.error("failed to send alert: {}", exc)
 
     async def stop(self) -> None:
         if self._application is None:
@@ -97,3 +129,23 @@ class TelegramBot:
             log.warning("error stopping telegram bot: {}", exc)
         self._application = None
         log.info("telegram bot stopped")
+
+
+async def _send_formatted(
+    send_fn: Callable[..., Awaitable[Any]], text: str
+) -> None:
+    """Send *text* as formatted HTML, falling back to plain text on failure."""
+    html = markdown_to_telegram_html(text)
+    try:
+        await send_fn(html, parse_mode="HTML")
+    except Exception:  # noqa: BLE001 – invalid markup, fall back
+        await send_fn(text)
+
+
+async def _edit_formatted(message: Message, text: str) -> None:
+    """Edit *message* with formatted HTML, falling back to plain text."""
+    html = markdown_to_telegram_html(text)
+    try:
+        await message.edit_text(html, parse_mode="HTML")
+    except Exception:  # noqa: BLE001 – invalid markup, fall back
+        await message.edit_text(text)
