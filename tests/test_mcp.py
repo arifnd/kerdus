@@ -85,6 +85,48 @@ async def test_env_is_forwarded_to_server() -> None:
         await manager.close()
 
 
+@pytest.mark.asyncio
+async def test_reconnect_after_close() -> None:
+    manager = MCPServerManager()
+    manager.reconnect_max_attempts = 1
+    try:
+        await manager.connect_all({"fake": FAKE_CFG})
+        await manager.close_server("fake")
+        assert await manager.list_tools() == []
+        ok = await manager.reconnect("fake", FAKE_CFG)
+        assert ok is True
+        result = await manager.call_tool("echo", {"text": "hi"})
+        assert result == "echo:hi"
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_tools_retained_after_session_loss_for_lazy_reconnect() -> None:
+    manager = MCPServerManager()
+    manager.reconnect_max_attempts = 1
+    try:
+        await manager.connect_all({"fake": FAKE_CFG})
+        # Simulate a dead session: remove it while keeping the tool registry.
+        await manager._close_server("fake", drop_tools=False)
+        # A call for a still-registered tool reconnects on demand.
+        result = await manager.call_tool("echo", {"text": "auto"})
+        assert result == "echo:auto"
+    finally:
+        await manager.close()
+
+
+@pytest.mark.asyncio
+async def test_close_server_removes_config() -> None:
+    manager = MCPServerManager()
+    try:
+        await manager.connect_all({"fake": FAKE_CFG})
+        await manager.close_server("fake")
+        assert await manager.list_tools() == []
+    finally:
+        await manager.close()
+
+
 def test_expand_env_resolves_placeholders() -> None:
     import os
 

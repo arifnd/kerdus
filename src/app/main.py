@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from fastapi import FastAPI, Request
 
 from .agent.agent import build_agent
 from .agent.llm import OpenAILLMClient
-from .config import AppConfig
+from .config import AppConfig, MCPServerConfig
 from .config_manager import ConfigManager
 from .logging import get_logger, setup_logging
 from .mcp.client import MCPServerManager
@@ -133,7 +134,11 @@ def _apply_config_change(ctx: AppContext, old: AppConfig, new: AppConfig) -> Non
             ctx.agent.set_max_iterations(new.agent.max_iterations)
 
     if old.mcp.servers != new.mcp.servers:
-        log.warning("mcp servers changed; server reconnect requires restart")
+        log.info("mcp servers changed; reconnecting affected servers")
+        if ctx.mcp is not None:
+            asyncio.get_running_loop().create_task(
+                _reconnect_mcp_servers(ctx, old.mcp.servers, new.mcp.servers)
+            )
 
     if old.scheduler.enabled != new.scheduler.enabled:
         log.info("scheduler enabled changed: {} -> {}", old.scheduler.enabled, new.scheduler.enabled)
@@ -144,6 +149,20 @@ def _apply_config_change(ctx: AppContext, old: AppConfig, new: AppConfig) -> Non
             elif not new.scheduler.enabled and old.scheduler.enabled:
                 ctx.scheduler.shutdown()
                 log.info("scheduler disabled and stopped")
+
+
+async def _reconnect_mcp_servers(
+    ctx: AppContext,
+    old_servers: dict[str, MCPServerConfig],
+    new_servers: dict[str, MCPServerConfig],
+) -> None:
+    for name, cfg in new_servers.items():
+        if name not in old_servers or old_servers[name] != cfg:
+            log.info("reconnecting MCP server {}", name)
+            await ctx.mcp.reconnect(name, cfg)
+    for name in old_servers.keys() - new_servers.keys():
+        log.info("closing MCP server {}", name)
+        await ctx.mcp.close_server(name)
 
 
 app = create_app()

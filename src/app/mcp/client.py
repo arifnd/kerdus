@@ -53,12 +53,23 @@ class MCPSession:
 
 
 class MCPServerManager:
+    """Manages MCP server sessions with self-healing reconnect.
+
+    Retains per-server config so a dead session can be re-spawned. Tool names
+    are cached per server and invalidated on disconnect/reconnect.
+    """
+
+    reconnect_max_attempts: int = 3
+
     def __init__(self) -> None:
         self._sessions: dict[str, MCPSession] = {}
         self._tools: dict[str, MCPTool] = {}
+        self._configs: dict[str, MCPServerConfig] = {}
+        self._reconnect_lock = asyncio.Lock()
 
     async def connect_all(self, servers: dict[str, MCPServerConfig]) -> None:
         for name, cfg in servers.items():
+            self._configs[name] = cfg
             try:
                 await self._connect(name, cfg)
             except Exception as exc:  # noqa: BLE001 - isolate per-server failures
@@ -68,7 +79,6 @@ class MCPServerManager:
         env = {**os.environ, **_expand_env(cfg.env)}
         params = StdioServerParameters(command=cfg.command, args=cfg.args, env=env)
 
-        read_stream, write_stream = None, None
         cleanup_ctx = stdio_client(params)
         read_stream, write_stream = await cleanup_ctx.__aenter__()
 
@@ -76,25 +86,92 @@ class MCPServerManager:
         session = await session_ctx.__aenter__()
         await session.initialize()
 
+        # Discover this server's tools before touching the shared cache.
+        list_result = await session.list_tools()
+        discovered: list[tuple[str, MCPTool]] = []
+        for tool in list_result.tools:
+            unprefixed = _strip_prefix(tool.name)
+            existing = next(
+                (t for t in self._tools.values() if t.server == name and t.name == unprefixed),
+                None,
+            )
+            occupied = any(t.name == unprefixed and t.server != name for t in self._tools.values())
+            prefixed = (
+                f"{name}__{unprefixed}" if (occupied or existing is not None) else unprefixed
+            )
+            discovered.append(
+                (
+                    prefixed,
+                    MCPTool(
+                        server=name,
+                        name=prefixed,
+                        description=tool.description or "",
+                        input_schema=tool.input_schema,
+                    ),
+                )
+            )
+
         self._sessions[name] = MCPSession(
             server_name=name,
             session=session,
             _cleanup=(cleanup_ctx, session_ctx),
         )
-
-        list_result = await session.list_tools()
-        for tool in list_result.tools:
-            prefixed = f"{name}__{tool.name}" if tool.name in self._tools else tool.name
-            mcp_tool = MCPTool(
-                server=name,
-                name=prefixed,
-                description=tool.description or "",
-                input_schema=tool.input_schema,
-            )
+        # Replace this server's tools atomically, keeping other servers' tools.
+        for t in list(self._tools.values()):
+            if t.server == name:
+                del self._tools[t.name]
+        for prefixed, mcp_tool in discovered:
             self._tools[prefixed] = mcp_tool
             log.debug("registered MCP tool: {}", prefixed)
 
         log.info("connected to MCP server {} ({} tools)", name, len(list_result.tools))
+
+    async def reconnect(self, name: str, cfg: MCPServerConfig | None = None) -> bool:
+        """Close and re-spawn *name*. Returns True on success."""
+        async with self._reconnect_lock:
+            await self._close_server(name, drop_tools=False)
+            self._configs[name] = cfg or self._configs[name]
+            for attempt in range(self.reconnect_max_attempts):
+                try:
+                    await self._connect(name, self._configs[name])
+                    return True
+                except Exception as exc:  # noqa: BLE001 - retry with backoff
+                    if attempt >= self.reconnect_max_attempts - 1:
+                        log.error(
+                            "failed to reconnect MCP server {} after {} attempts: {}",
+                            name,
+                            self.reconnect_max_attempts,
+                            exc,
+                        )
+                        return False
+                    delay = 1.0 * (2**attempt)
+                    log.warning(
+                        "reconnect attempt {} for {} failed ({}), retrying in {:.1f}s",
+                        attempt + 1,
+                        name,
+                        exc.__class__.__name__,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+            return False
+
+    async def _close_server(self, name: str, *, drop_tools: bool) -> None:
+        wrapper = self._sessions.pop(name, None)
+        if wrapper is not None:
+            try:
+                cleanup_ctx, session_ctx = wrapper._cleanup
+                await session_ctx.__aexit__(None, None, None)
+                await cleanup_ctx.__aexit__(None, None, None)
+                log.debug("closed MCP session {}", name)
+            except Exception as exc:  # noqa: BLE001 - best-effort cleanup
+                log.warning("error closing MCP session {}: {}", name, exc)
+        if drop_tools:
+            for t in [t for t in self._tools.values() if t.server == name]:
+                del self._tools[t.name]
+            self._configs.pop(name, None)
+
+    async def close_server(self, name: str) -> None:
+        await self._close_server(name, drop_tools=True)
 
     async def list_tools(self) -> list[MCPTool]:
         return list(self._tools.values())
@@ -106,13 +183,18 @@ class MCPServerManager:
 
         session_wrapper = self._sessions.get(tool.server)
         if session_wrapper is None:
-            raise MCPConnectionError(
-                f"MCP server {tool.server} is not connected",
-                server=tool.server,
-            )
+            # Server is registered but not connected – try to reconnect once.
+            if tool.server in self._configs:
+                await self.reconnect(tool.server)
+                session_wrapper = self._sessions.get(tool.server)
+            if session_wrapper is None:
+                raise MCPConnectionError(
+                    f"MCP server {tool.server} is not connected",
+                    server=tool.server,
+                )
 
         session = session_wrapper.session
-        tool_name = full_name.split("__", 1)[-1] if "__" in full_name else full_name
+        tool_name = _strip_prefix(full_name)
 
         try:
             result = await asyncio.wait_for(
@@ -124,6 +206,13 @@ class MCPServerManager:
                 f"MCP tool {tool_name} timed out",
                 server=tool.server,
             )
+        except Exception as exc:
+            log.warning("MCP tool {} failed on server {}: {}", tool_name, tool.server, exc)
+            await self._close_server(tool.server, drop_tools=False)
+            raise MCPConnectionError(
+                f"MCP server {tool.server} lost connection",
+                server=tool.server,
+            ) from exc
 
         if hasattr(result, "is_error") and result.is_error:
             error_text = _extract_text(result)
@@ -135,16 +224,14 @@ class MCPServerManager:
         return _extract_text(result)
 
     async def close(self) -> None:
-        for name, wrapper in self._sessions.items():
-            try:
-                cleanup_ctx, session_ctx = wrapper._cleanup
-                await session_ctx.__aexit__(None, None, None)
-                await cleanup_ctx.__aexit__(None, None, None)
-                log.debug("closed MCP session {}", name)
-            except Exception as exc:  # noqa: BLE001 - best-effort cleanup
-                log.warning("error closing MCP session {}: {}", name, exc)
-        self._sessions.clear()
+        for name in list(self._sessions.keys()):
+            await self._close_server(name, drop_tools=False)
+        self._configs.clear()
         self._tools.clear()
+
+
+def _strip_prefix(name: str) -> str:
+    return name.split("__", 1)[-1] if "__" in name else name
 
 
 _ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
