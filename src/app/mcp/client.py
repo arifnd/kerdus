@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -63,7 +65,8 @@ class MCPServerManager:
                 log.error("failed to connect to MCP server {}: {}", name, exc)
 
     async def _connect(self, name: str, cfg: MCPServerConfig) -> None:
-        params = StdioServerParameters(command=cfg.command, args=cfg.args)
+        env = {**os.environ, **_expand_env(cfg.env)}
+        params = StdioServerParameters(command=cfg.command, args=cfg.args, env=env)
 
         read_stream, write_stream = None, None
         cleanup_ctx = stdio_client(params)
@@ -142,6 +145,19 @@ class MCPServerManager:
                 log.warning("error closing MCP session {}: {}", name, exc)
         self._sessions.clear()
         self._tools.clear()
+
+
+_ENV_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)")
+
+
+def _expand_env(env: dict[str, str]) -> dict[str, str]:
+    expanded: dict[str, str] = {}
+    for key, value in env.items():
+        expanded[key] = _ENV_PATTERN.sub(
+            lambda m: os.environ.get(m.group(1) or m.group(2) or "", ""),
+            value,
+        )
+    return expanded
 
 
 def _extract_text(result: Any) -> str:

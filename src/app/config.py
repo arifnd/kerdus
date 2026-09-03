@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .settings import get_settings
+
 
 class TelegramConfig(BaseModel):
     allowed_user_id: int
@@ -18,6 +20,7 @@ class AgentConfig(BaseModel):
 class MCPServerConfig(BaseModel):
     command: str
     args: list[str] = Field(default_factory=list)
+    env: dict[str, str] = Field(default_factory=dict)
 
 
 class MCPConfig(BaseModel):
@@ -41,7 +44,11 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
     config_path = Path(path)
     with config_path.open("r", encoding="utf-8") as fh:
         raw = json.load(fh)
-    return AppConfig.model_validate(raw)
+    cfg = AppConfig.model_validate(raw)
+    env_allowed_user_id = get_settings().telegram_allowed_user_id
+    if env_allowed_user_id:
+        cfg.telegram.allowed_user_id = env_allowed_user_id
+    return cfg
 
 
 _bool_map: dict[str, bool] = {

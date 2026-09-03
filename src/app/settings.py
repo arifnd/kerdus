@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     telegram_bot_token: str = ""
+    telegram_allowed_user_id: int = 0
     llm_api_key: str = ""
     llm_model: str = "gpt-4o"
     llm_base_url: str = ""

@@ -62,7 +62,11 @@ uv sync
     "servers": {
       "dokploy": {
         "command": "npx",
-        "args": ["-y", "dokploy-mcp"]
+        "args": ["-y", "dokploy-mcp"],
+        "env": {
+          "DOKPLOY_URL": "${DOKPLOY_URL}",
+          "DOKPLOY_API_KEY": "${DOKPLOY_API_KEY}"
+        }
       }
     }
   },
@@ -72,10 +76,16 @@ uv sync
 }
 ```
 
+MCP server configs accept an optional `env` map passed to the spawned process.
+Values referencing `${VAR}` (or `$VAR`) are expanded from the process
+environment at launch, so secrets can stay in `.env` rather than `config.json`.
+The parent process environment is always inherited as well.
+
 `.env` (secrets, never commit):
 
 ```
 TELEGRAM_BOT_TOKEN=...
+TELEGRAM_ALLOWED_USER_ID=...
 LLM_API_KEY=...
 LLM_MODEL=gpt-4o
 LLM_BASE_URL=

@@ -24,6 +24,13 @@ async def fail() -> str:
     raise RuntimeError("boom")
 
 
+@server.tool()
+async def env_value(key: str) -> str:
+    import os
+
+    return os.environ.get(key, "")
+
+
 if __name__ == "__main__":
     import anyio
 

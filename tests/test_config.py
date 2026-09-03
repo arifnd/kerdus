@@ -16,6 +16,17 @@ def test_load_config() -> None:
     assert cfg.scheduler.enabled is True
 
 
+def test_env_allowed_user_id_overrides_config(monkeypatch) -> None:
+    get_settings.cache_clear()
+    try:
+        monkeypatch.setenv("TELEGRAM_ALLOWED_USER_ID", "987654321")
+        cfg = load_config("config.json")
+        assert cfg.telegram.allowed_user_id == 987654321
+    finally:
+        monkeypatch.delenv("TELEGRAM_ALLOWED_USER_ID", raising=False)
+        get_settings.cache_clear()
+
+
 def test_redact() -> None:
     assert redact("") == ""
     assert redact("short") == "***"
