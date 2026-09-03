@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any, Protocol
 
+from jsonschema import Draft202012Validator
+
 from ..logging import get_logger
 from ..mcp.client import MCPError, MCPServerManager
 from ..tools import LocalTool, build_local_tools
@@ -28,12 +30,40 @@ class Agent:
         executor: ToolExecutor,
         local_tools: list[LocalTool],
         max_iterations: int = 5,
+        max_tool_result_chars: int = 4000,
     ) -> None:
         self._llm = llm
         self._mcp = mcp
         self._executor = executor
         self._local_tools = local_tools
         self._max_iterations = max_iterations
+        self._max_tool_result_chars = max_tool_result_chars
+
+    def set_max_iterations(self, value: int) -> None:
+        self._max_iterations = value
+
+    def _schema_for_local(self, name: str) -> dict[str, Any] | None:
+        for t in self._local_tools:
+            if t.name == name:
+                return t.input_schema
+        return None
+
+    async def _validate_arguments(self, name: str, arguments: dict[str, Any]) -> None:
+        schema = self._schema_for_local(name)
+        if schema is None:
+            for tool in await self._mcp.list_tools():
+                if tool.name == name:
+                    schema = tool.input_schema
+                    break
+        if not schema:
+            raise ToolArgumentError(f"unknown tool: {name}")
+        errors = sorted(
+            Draft202012Validator(schema).iter_errors(arguments),
+            key=lambda e: e.path,
+        )
+        if errors:
+            detail = errors[0].message
+            raise ToolArgumentError(f"invalid arguments for {name}: {detail}")
 
     async def _toolspecs(self) -> list[LLMToolSpec]:
         specs: list[LLMToolSpec] = [
@@ -61,11 +91,14 @@ class Agent:
                 result = await local.func(**arguments)
             except TypeError as exc:
                 raise ToolArgumentError(f"invalid arguments for {name}: {exc}") from exc
-            return _stringify(result)
+            return _truncate(_stringify(result), self._max_tool_result_chars)
 
         mcp_names = {t.name for t in await self._mcp.list_tools()}
         if name in mcp_names:
-            return await self._executor.call_tool(name, arguments)
+            return _truncate(
+                await self._executor.call_tool(name, arguments),
+                self._max_tool_result_chars,
+            )
 
         raise ToolArgumentError(f"unknown tool: {name}")
 
@@ -91,6 +124,7 @@ class Agent:
 
             for call in response.tool_calls:
                 try:
+                    await self._validate_arguments(call.name, call.arguments)
                     result_text = await self._dispatch(call.name, call.arguments)
                 except MCPError as exc:
                     messages.append(
@@ -150,11 +184,18 @@ def _stringify(value: Any) -> str:
         return str(value)
 
 
+def _truncate(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "\n… [truncated]"
+
+
 def build_agent(
     llm: LLMClient,
     mcp: MCPServerManager,
     scheduler: Any,
     max_iterations: int,
+    max_tool_result_chars: int = 4000,
 ) -> Agent:
     local_tools = build_local_tools(scheduler)
     return Agent(
@@ -163,4 +204,5 @@ def build_agent(
         executor=mcp,
         local_tools=local_tools,
         max_iterations=max_iterations,
+        max_tool_result_chars=max_tool_result_chars,
     )

@@ -5,7 +5,7 @@ import pytest
 from app.agent.agent import Agent
 from app.agent.llm import LLMResponse, ToolCall
 from app.mcp.client import MCPConnectionError, MCPTool
-from app.tools import build_local_tools
+from app.tools import LocalTool, build_local_tools
 from app.tools.memory_scheduler import MemorySchedulerService
 
 
@@ -37,7 +37,7 @@ class FakeMCP:
         return f"result-of:{name}"
 
 
-def make_agent(llm: FakeLLM, mcp: FakeMCP, max_iterations: int = 5) -> Agent:
+def make_agent(llm: FakeLLM, mcp: FakeMCP, max_iterations: int = 5, max_tool_result_chars: int = 4000) -> Agent:
     scheduler = MemorySchedulerService()
     return Agent(
         llm=llm,
@@ -45,6 +45,7 @@ def make_agent(llm: FakeLLM, mcp: FakeMCP, max_iterations: int = 5) -> Agent:
         executor=mcp,
         local_tools=build_local_tools(scheduler),
         max_iterations=max_iterations,
+        max_tool_result_chars=max_tool_result_chars,
     )
 
 
@@ -193,3 +194,61 @@ async def test_tool_calls_preceded_by_assistant_message() -> None:
     assert sent[3]["role"] == "tool"
     assert sent[3]["tool_call_id"] == "call_123"
     assert "tool_call_id" in sent[3]
+
+
+@pytest.mark.asyncio
+async def test_invalid_arguments_rejected_by_schema() -> None:
+    llm = FakeLLM(
+        [
+            # interval_seconds is required; missing it should fail validation
+            LLMResponse(tool_calls=[ToolCall(name="create_uptime_check", arguments={"id": "x", "url": "http://a"})]),
+            LLMResponse(text="ok"),
+        ]
+    )
+    agent = make_agent(llm, FakeMCP([]))
+    await agent.handle("create check")
+    last_tool_msgs = [m["content"] for m in llm.calls[-1][0] if m.get("role") == "tool"]
+    assert any("Argument error" in m for m in last_tool_msgs)
+
+
+@pytest.mark.asyncio
+async def test_tool_result_truncated() -> None:
+    long_result = "R" * 100
+
+    async def _long_tool(**kwargs: object) -> str:
+        return long_result
+
+    local_tool = LocalTool(
+        name="long_tool",
+        description="returns a long string",
+        input_schema={"type": "object", "properties": {}},
+        func=_long_tool,
+    )
+    agent = Agent(
+        llm=FakeLLM([]),
+        mcp=FakeMCP([]),
+        executor=FakeMCP([]),
+        local_tools=[local_tool],
+        max_iterations=5,
+        max_tool_result_chars=50,
+    )
+    result = await agent._dispatch("long_tool", {})
+    assert "truncated" in result
+    assert len(result) < len(long_result)
+
+
+@pytest.mark.asyncio
+async def test_set_max_iterations_setter() -> None:
+    class LoopLLM2:
+        def __init__(self):
+            self.calls = 0
+
+        async def complete(self, messages, tools):
+            self.calls += 1
+            return LLMResponse(tool_calls=[ToolCall(name="list_scheduled_checks", arguments={})])
+
+    llm = LoopLLM2()
+    agent = make_agent(llm, FakeMCP([]))
+    agent.set_max_iterations(2)
+    await agent.handle("loop")
+    assert llm.calls == 2

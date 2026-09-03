@@ -43,7 +43,10 @@ def create_app(
         ctx.config_manager.on_change(on_config_change)
         config = ctx.config_manager.config
 
-        ctx.llm = OpenAILLMClient()
+        ctx.llm = OpenAILLMClient(
+            max_llm_retries=config.agent.max_llm_retries,
+            llm_retry_base_seconds=config.agent.llm_retry_base_seconds,
+        )
 
         await ctx.mcp.connect_all(config.mcp.servers)
 
@@ -56,6 +59,7 @@ def create_app(
             mcp=ctx.mcp,
             scheduler=ctx.scheduler,
             max_iterations=config.agent.max_iterations,
+            max_tool_result_chars=config.agent.max_tool_result_chars,
         )
 
         ctx.telegram = TelegramBot(
@@ -126,7 +130,7 @@ def _apply_config_change(ctx: AppContext, old: AppConfig, new: AppConfig) -> Non
     if old.agent.max_iterations != new.agent.max_iterations:
         log.info("agent max_iterations changed: {} -> {}", old.agent.max_iterations, new.agent.max_iterations)
         if ctx.agent:
-            ctx.agent._max_iterations = new.agent.max_iterations
+            ctx.agent.set_max_iterations(new.agent.max_iterations)
 
     if old.mcp.servers != new.mcp.servers:
         log.warning("mcp servers changed; server reconnect requires restart")
