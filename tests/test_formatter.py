@@ -105,6 +105,76 @@ class TestEdgeCases:
         assert "<code>code</code>" in result
 
 
+class TestLists:
+    def test_unordered_dash(self) -> None:
+        assert markdown_to_telegram_html("- a\n- b") == "• a\n• b"
+
+    def test_unordered_star(self) -> None:
+        assert markdown_to_telegram_html("* a\n* b") == "• a\n• b"
+
+    def test_unordered_plus(self) -> None:
+        assert markdown_to_telegram_html("+ a\n+ b") == "• a\n• b"
+
+    def test_ordered_dot(self) -> None:
+        assert markdown_to_telegram_html("1. a\n2. b") == "1. a\n2. b"
+
+    def test_ordered_paren(self) -> None:
+        assert markdown_to_telegram_html("1) a\n2) b") == "1. a\n2. b"
+
+    def test_nested_list(self) -> None:
+        result = markdown_to_telegram_html("- top\n  - sub")
+        assert result == "• top\n  • sub"
+
+    def test_list_star_not_emphasis(self) -> None:
+        assert markdown_to_telegram_html("* item") == "• item"
+
+
+class TestBlockquotes:
+    def test_single_line(self) -> None:
+        assert markdown_to_telegram_html("> quote") == "│ quote"
+
+    def test_multi_line(self) -> None:
+        assert markdown_to_telegram_html("> a\n> b") == "│ a\n│ b"
+
+    def test_inline_formatting(self) -> None:
+        assert markdown_to_telegram_html("> **bold** here") == "│ <b>bold</b> here"
+
+
+class TestHorizontalRule:
+    def test_dashes(self) -> None:
+        assert markdown_to_telegram_html("---") == "—"
+
+    def test_stars(self) -> None:
+        assert markdown_to_telegram_html("***") == "—"
+
+    def test_rule_between_text(self) -> None:
+        assert markdown_to_telegram_html("a\n---\nb") == "a\n—\nb"
+
+
+class TestInlineEdgeCases:
+    def test_nested_bold_italic(self) -> None:
+        assert (
+            markdown_to_telegram_html("**bold *italic* tail**")
+            == "<b>bold <i>italic</i> tail</b>"
+        )
+
+    def test_escaped_underscore(self) -> None:
+        assert markdown_to_telegram_html(r"\_literal\_") == "_literal_"
+
+    def test_escaped_asterisk(self) -> None:
+        assert markdown_to_telegram_html(r"\*literal\*") == "*literal*"
+
+    def test_escaped_in_snake_case(self) -> None:
+        assert markdown_to_telegram_html(r"snake\_case\_name") == "snake_case_name"
+
+    def test_adjacent_code_spans(self) -> None:
+        result = markdown_to_telegram_html("a `x` and `y`")
+        assert result == "a <code>x</code> and <code>y</code>"
+
+    def test_underscore_not_in_word_regression(self) -> None:
+        assert markdown_to_telegram_html("some_variable_name") == "some_variable_name"
+
+
 class TestSplitTelegramMessage:
     def test_short_text_single_chunk(self) -> None:
         assert split_telegram_message("hello") == ["hello"]

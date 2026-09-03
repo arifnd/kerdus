@@ -7,9 +7,10 @@ import secrets
 def markdown_to_telegram_html(text: str) -> str:
     """Convert standard Markdown to Telegram-compatible HTML.
 
-    Handles bold, italic, strikethrough, inline code, fenced code blocks,
-    and links.  Falls back to the original text for anything the converter
-    cannot express in Telegram HTML.
+    Handles bold, italic, strikethrough, inline/fenced code, links, headings,
+    unordered/ordered lists, blockquotes, and horizontal rules.  Falls back to
+    the original text for anything the converter cannot express in Telegram
+    HTML.
     """
     if not text:
         return text
@@ -22,53 +23,149 @@ def markdown_to_telegram_html(text: str) -> str:
         placeholders[key] = content
         return key
 
-    # Escape HTML first so any raw `<`, `>`, `&` in the input can never pass
-    # through as markup.  Everything we generate below is produced from the
-    # already-escaped text or stored in placeholders.
-    result = _escape_html(text)
+    lines = text.split("\n")
+    out: list[str] = []
+    i = 0
+    n = len(lines)
 
-    # Fenced code blocks – protect first so inner content is never touched
-    result = re.sub(
-        r"```(\w*)[\n\r]+(.*?)\n*```",
-        lambda m: _placeholder(
-            f"<pre><code class=\"language-{m.group(1)}\">{m.group(2)}</code></pre>"
-            if m.group(1)
-            else f"<pre>{m.group(2)}</pre>"
-        ),
-        result,
-        flags=re.DOTALL,
-    )
+    while i < n:
+        line = lines[i]
 
-    # Inline code
-    result = re.sub(
-        r"`([^`\n]+)`",
-        lambda m: _placeholder(f"<code>{m.group(1)}</code>"),
-        result,
-    )
+        # Fenced code block – protect first so inner content is never touched
+        if re.match(r"^\s*```", line):
+            lang = line.strip().strip("`").strip()
+            body: list[str] = []
+            i += 1
+            while i < n and not re.match(r"^\s*```", lines[i]):
+                body.append(lines[i])
+                i += 1
+            if i < n:
+                i += 1  # skip closing fence
+            code = _escape_html("\n".join(body))
+            if lang:
+                out.append(
+                    _placeholder(
+                        f'<pre><code class="language-{_escape_html(lang)}">{code}</code></pre>'
+                    )
+                )
+            else:
+                out.append(_placeholder(f"<pre>{code}</pre>"))
+            continue
 
-    # Bold – **text**
-    result = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", result)
-    result = re.sub(r"__(.+?)__", r"<b>\1</b>", result)
+        # Horizontal rule – standalone --- / *** / ___
+        if re.fullmatch(r"[ \t]*(\*{3,}|-{3,}|_{3,})[ \t]*", line):
+            out.append("—")
+            i += 1
+            continue
 
-    # Italic – *text* or _text_
-    result = re.sub(r"<b>\*(.*?)\*</b>", r"<b>\1</b>", result)  # * within bold
-    result = re.sub(r"\*(.+?)\*", r"<i>\1</i>", result)
-    result = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"<i>\1</i>", result)
+        # Heading – convert to bold since Telegram HTML has no heading tags
+        heading = re.match(r"^#{1,6}\s+(.+?)\s*#*\s*$", line)
+        if heading:
+            out.append("<b>" + _inline(heading.group(1), _placeholder) + "</b>")
+            i += 1
+            continue
 
-    # Strikethrough – ~~text~~
-    result = re.sub(r"~~(.+?)~~", r"<s>\1</s>", result)
+        # Blockquote – collapse consecutive `> ` lines
+        if line.lstrip().startswith(">"):
+            bq_lines: list[str] = []
+            while i < n and lines[i].lstrip().startswith(">"):
+                content = lines[i].lstrip()[1:].lstrip()
+                bq_lines.append(_inline(content, _placeholder))
+                i += 1
+            out.append("│ " + "\n│ ".join(bq_lines))
+            continue
 
-    # Links – [text](url)
-    result = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", r'<a href="\2">\1</a>', result)
+        # List items – group consecutive items of the same kind
+        list_group = _match_list_group(lines, i)
+        if list_group is not None:
+            items, next_i = list_group
+            rendered: list[str] = []
+            for marker, indent, content_line in items:
+                pad = "  " * (indent // 2)
+                if marker.isdigit() or marker in {")", "."} or marker.endswith((".", ")")):
+                    num = marker.rstrip(".)")
+                    rendered.append(f"{pad}{num}. {_inline(content_line, _placeholder)}")
+                else:
+                    rendered.append(f"{pad}• {_inline(content_line, _placeholder)}")
+            out.append("\n".join(rendered))
+            i = next_i
+            continue
 
-    # Headers – convert to bold since Telegram HTML has no heading tags
-    result = re.sub(r"^#{1,6}\s+(.+)$", r"<b>\1</b>", result, flags=re.MULTILINE)
+        # Regular text line
+        out.append(_inline(line, _placeholder))
+        i += 1
 
-    # Restore placeholders (their content was escaped above)
+    result = "\n".join(out)
     for key, value in placeholders.items():
         result = result.replace(key, value)
-
     return result
+
+
+_LIST_ITEM_RE = re.compile(r"^(\s*)([-*+]|\d+[.)])(\s+)(.*)$")
+
+
+def _match_list_group(
+    lines: list[str], start: int
+) -> tuple[list[tuple[str, int, str]], int] | None:
+    """Match a run of consecutive list items; returns (items, next_index)."""
+    first = _LIST_ITEM_RE.match(lines[start])
+    if first is None:
+        return None
+    kind = first.group(2)
+    ordered = kind[0].isdigit() or kind in {")", "."}
+    items: list[tuple[str, int, str]] = []
+    i = start
+    while i < len(lines):
+        m = _LIST_ITEM_RE.match(lines[i])
+        if m is None:
+            break
+        mkind = m.group(2)
+        is_ordered = mkind[0].isdigit() or mkind in {")", "."}
+        if is_ordered != ordered:
+            break
+        items.append((mkind, len(m.group(1)), m.group(4)))
+        i += 1
+    return (items, i)
+
+
+def _inline(text: str, _placeholder) -> str:
+    """Apply inline markdown to a single line (already free of block markers)."""
+    if not text:
+        return ""
+
+    # Protect inline code spans first so `*`, `_`, `<`, etc. inside are never
+    # treated as markup or HTML.
+    protected = re.sub(
+        r"`([^`\n]+)`",
+        lambda m: _placeholder(f"<code>{_escape_html(m.group(1))}</code>"),
+        text,
+    )
+
+    # Backslash escapes – neutralize the following markdown char via a
+    # placeholder so later emphasis regexes cannot reformat it.
+    protected = re.sub(
+        r"\\([*_`~\[\]])", lambda m: _placeholder(m.group(1)), protected
+    )
+
+    # Escape raw HTML now (while literal text and <>,& remain); markdown
+    # delimiters (* _ ~) are untouched so the substitutions below still match.
+    protected = _escape_html(protected)
+
+    # Bold – **text** (a nested *inside* is handled by the later italic pass)
+    protected = re.sub(r"__(.+?)__(?!_)", r"<b>\1</b>", protected)
+    protected = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", protected)
+
+    # Italic – *text* or _text_ (only when not inside a word)
+    protected = re.sub(r"\*(.+?)\*", r"<i>\1</i>", protected)
+    protected = re.sub(r"(?<![A-Za-z0-9_])_(.+?)_(?![A-Za-z0-9_])", r"<i>\1</i>", protected)
+
+    # Strikethrough – ~~text~~
+    protected = re.sub(r"~~(.+?)~~", r"<s>\1</s>", protected)
+
+    # Links – [text](url)
+    protected = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", r'<a href="\2">\1</a>', protected)
+
+    return protected
 
 
 def _escape_html(text: str) -> str:
