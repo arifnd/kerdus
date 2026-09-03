@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import secrets
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -9,7 +10,7 @@ from telegram.ext import Application, ApplicationBuilder, ContextTypes, MessageH
 
 from ..config import TelegramConfig
 from ..formatter import markdown_to_telegram_html, split_telegram_message
-from ..logging import get_logger
+from ..logging import clear_request_id, get_logger, set_request_id
 from ..settings import get_settings
 
 log = get_logger("telegram")
@@ -56,6 +57,7 @@ class TelegramBot:
 
     async def _handle_and_reply(self, message: Message) -> None:
         placeholder_msg: Message | None = None
+        set_request_id(secrets.token_hex(4))
         try:
             if self._processing_hint:
                 placeholder_msg = await message.reply_text(_PLACEHOLDER)
@@ -80,6 +82,8 @@ class TelegramBot:
                     await message.reply_text("I couldn't complete that request right now.")
             except Exception as fallback_exc:  # noqa: BLE001
                 log.debug("failed to send fallback error: {}", fallback_exc)
+        finally:
+            clear_request_id()
 
     async def start(self) -> None:
         token = get_settings().telegram_bot_token

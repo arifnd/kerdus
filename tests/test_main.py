@@ -42,6 +42,10 @@ def test_health_and_ready(config_path, state_path) -> None:
         assert ready.status_code == 200
         body = ready.json()
         assert body["status"] in {"ready", "not_ready"}
+        assert isinstance(body["telegram"], bool)
+        assert isinstance(body["scheduler"], bool)
+        assert isinstance(body["mcp"], dict)
+        assert body["llm"] in {"reachable", "unreachable", "not_configured"}
 
 
 def test_config_reload_endpoint(config_path, state_path) -> None:

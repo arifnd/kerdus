@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 
+import httpx
 from fastapi import FastAPI, Request
 
 from .agent.agent import build_agent
@@ -96,12 +98,15 @@ def create_app(
 
     @app.get("/ready")
     async def ready() -> dict:
-        status = "ready" if ctx.ready else "not_ready"
+        scheduler_running = (
+            ctx.scheduler is not None and ctx.scheduler.is_running()
+        )
         return {
-            "status": status,
+            "status": "ready" if ctx.ready else "not_ready",
             "telegram": ctx.telegram is not None and ctx.ready,
-            "scheduler": ctx.scheduler is not None,
-            "mcp": len(await ctx.mcp.list_tools()) > 0,
+            "scheduler": scheduler_running,
+            "mcp": ctx.mcp.server_status(),
+            "llm": await _llm_status(ctx),
         }
 
     @app.post("/config/reload")
@@ -149,6 +154,28 @@ def _apply_config_change(ctx: AppContext, old: AppConfig, new: AppConfig) -> Non
             elif not new.scheduler.enabled and old.scheduler.enabled:
                 ctx.scheduler.shutdown()
                 log.info("scheduler disabled and stopped")
+
+
+_LLM_CACHE_TTL = 30.0
+_llm_probe_cache: tuple[float, str] | None = None
+
+
+async def _llm_status(ctx: AppContext) -> str:
+    global _llm_probe_cache
+    if ctx.llm is None or not ctx.llm.base_url:
+        return "not_configured"
+    now = time.monotonic()
+    if _llm_probe_cache and now - _llm_probe_cache[0] < _LLM_CACHE_TTL:
+        return _llm_probe_cache[1]
+    status = "unreachable"
+    try:
+        async with httpx.AsyncClient(timeout=2.0, follow_redirects=True) as client:
+            await client.get(ctx.llm.base_url)
+        status = "reachable"
+    except Exception:  # noqa: BLE001 - probe failure is non-fatal
+        status = "unreachable"
+    _llm_probe_cache = (now, status)
+    return status
 
 
 async def _reconnect_mcp_servers(

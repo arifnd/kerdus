@@ -71,6 +71,10 @@ class OpenAILLMClient:
             self._client = AsyncOpenAI(**kwargs)
         return self._client
 
+    @property
+    def base_url(self) -> str:
+        return self._settings.llm_base_url
+
     async def complete(
         self,
         messages: list[dict[str, str]],

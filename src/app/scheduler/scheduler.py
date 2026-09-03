@@ -55,6 +55,9 @@ class SchedulerService:
         self.save_state()
         log.info("scheduler stopped")
 
+    def is_running(self) -> bool:
+        return bool(self._scheduler.running)
+
     def load_state(self) -> None:
         self._jobs = {}
         self._tracker.clear()

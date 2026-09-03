@@ -176,6 +176,13 @@ class MCPServerManager:
     async def list_tools(self) -> list[MCPTool]:
         return list(self._tools.values())
 
+    def server_status(self) -> dict[str, str]:
+        """Return per-server connection status for readiness reporting."""
+        status: dict[str, str] = {}
+        for name in self._configs:
+            status[name] = "connected" if name in self._sessions else "failed"
+        return status
+
     async def call_tool(self, full_name: str, arguments: dict[str, Any]) -> str:
         tool = self._tools.get(full_name)
         if tool is None:

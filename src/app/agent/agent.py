@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any, Protocol
 
@@ -108,6 +109,7 @@ class Agent:
             {"role": "user", "content": user_text},
         ]
         tools = await self._toolspecs()
+        iteration = 1
 
         for _ in range(self._max_iterations):
             try:
@@ -123,9 +125,17 @@ class Agent:
                 messages.append(dict(response.assistant_message))
 
             for call in response.tool_calls:
+                start = asyncio.get_event_loop().time()
                 try:
                     await self._validate_arguments(call.name, call.arguments)
                     result_text = await self._dispatch(call.name, call.arguments)
+                    log.debug(
+                        "iteration={} tool={} duration_ms={:.0f} result_chars={}",
+                        iteration,
+                        call.name,
+                        (asyncio.get_event_loop().time() - start) * 1000,
+                        len(result_text),
+                    )
                 except MCPError as exc:
                     messages.append(
                         {
@@ -161,6 +171,8 @@ class Agent:
                         "content": result_text,
                     }
                 )
+
+            iteration += 1
 
         return "I couldn't complete that request in the allowed number of steps. Try being more specific."
 
