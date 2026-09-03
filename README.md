@@ -4,9 +4,16 @@ A lightweight, single-user AI operations agent accessible through Telegram.
 
 ## Architecture
 
-```
-Telegram → Bot → Agent (LLM) → MCP Client → Dokploy MCP → Dokploy
-                           └→ Scheduler → HTTP uptime checks
+```mermaid
+graph TD
+    User[Telegram User] --> Bot[Telegram Bot]
+    Bot --> Agent[Agent - LLM]
+    Agent --> MCP[MCP Client]
+    MCP --> DokployMCP[Dokploy MCP]
+    DokployMCP --> Dokploy[Dokploy]
+    Agent --> Scheduler[Scheduler]
+    Scheduler --> Uptime[HTTP Uptime Checks]
+    Scheduler -->|state changes| Bot
 ```
 
 ## Stack
