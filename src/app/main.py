@@ -11,6 +11,7 @@ from .agent.llm import OpenAILLMClient
 from .config import AppConfig
 from .config_manager import ConfigManager
 from .logging import get_logger, setup_logging
+from .settings import get_settings
 from .telegram.bot import TelegramBot
 from .tools import build_local_tools
 
@@ -46,7 +47,7 @@ def create_app(
             llm_retry_base_seconds=config.agent.llm_retry_base_seconds,
         )
 
-        local_tools = build_local_tools(enabled=config.porkbun.enabled)
+        local_tools = build_local_tools(enabled=get_settings().porkbun_enabled)
 
         ctx.agent = build_agent(
             llm=ctx.llm,
@@ -131,11 +132,6 @@ def _apply_config_change(ctx: AppContext, old: AppConfig, new: AppConfig) -> Non
         )
         if ctx.agent:
             ctx.agent.set_max_iterations(new.agent.max_iterations)
-
-    if old.porkbun.enabled != new.porkbun.enabled:
-        log.info("porkbun enabled changed: {} -> {}", old.porkbun.enabled, new.porkbun.enabled)
-        if ctx.agent:
-            ctx.agent.set_local_tools(build_local_tools(enabled=new.porkbun.enabled))
 
 
 _LLM_CACHE_TTL = 30.0

@@ -11,7 +11,6 @@ def test_load_config() -> None:
     cfg = load_config("config.json")
     assert cfg.telegram.allowed_user_id == 123456789
     assert cfg.agent.max_iterations == 5
-    assert cfg.porkbun.enabled is True
 
 
 def test_env_allowed_user_id_overrides_config(monkeypatch) -> None:

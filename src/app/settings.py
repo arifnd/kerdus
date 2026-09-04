@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "gpt-4o"
     llm_base_url: str = ""
+    porkbun_enabled: bool = True
     porkbun_api_key: str = ""
     porkbun_secret_key: str = ""
     log_level: str = "INFO"

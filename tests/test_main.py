@@ -13,7 +13,6 @@ def _write_config(path: Path) -> None:
     config = {
         "telegram": {"allowed_user_id": 111},
         "agent": {"max_iterations": 5},
-        "porkbun": {"enabled": True},
     }
     path.write_text(json.dumps(config), encoding="utf-8")
 

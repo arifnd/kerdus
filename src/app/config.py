@@ -21,14 +21,9 @@ class AgentConfig(BaseModel):
     llm_retry_base_seconds: float = Field(default=1.0, ge=0.1, le=60)
 
 
-class PorkbunConfig(BaseModel):
-    enabled: bool = True
-
-
 class AppConfig(BaseModel):
     telegram: TelegramConfig
     agent: AgentConfig
-    porkbun: PorkbunConfig = Field(default_factory=PorkbunConfig)
 
     model_config = {"extra": "forbid"}
 

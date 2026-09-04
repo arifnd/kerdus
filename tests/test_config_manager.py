@@ -18,7 +18,6 @@ def config_data():
     return {
         "telegram": {"allowed_user_id": 111},
         "agent": {"max_iterations": 5},
-        "porkbun": {"enabled": True},
     }
 
 
@@ -44,7 +43,6 @@ class TestConfigManager:
             {
                 "telegram": {"allowed_user_id": 999},
                 "agent": {"max_iterations": 3},
-                "porkbun": {"enabled": True},
             },
         )
         mgr.reload()
@@ -64,7 +62,6 @@ class TestConfigManager:
             {
                 "telegram": {"allowed_user_id": 999},
                 "agent": {"max_iterations": 5},
-                "porkbun": {"enabled": True},
             },
         )
         mgr.reload()
@@ -84,7 +81,6 @@ class TestConfigManager:
             {
                 "telegram": {"allowed_user_id": 222},
                 "agent": {"max_iterations": 10},
-                "porkbun": {"enabled": True},
             },
         )
         cfg = mgr.reload()
@@ -109,7 +105,6 @@ class TestConfigManager:
             {
                 "telegram": {"allowed_user_id": 555},
                 "agent": {"max_iterations": 5},
-                "porkbun": {"enabled": True},
             },
         )
 
