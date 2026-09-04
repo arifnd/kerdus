@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from . import desec, porkbun
+from . import desec, dokploy, porkbun
 
 
 class ToolDisabledError(Exception):
@@ -21,6 +21,7 @@ class LocalTool:
 def build_local_tools(
     porkbun_enabled: bool = True,
     desec_enabled: bool = True,
+    dokploy_enabled: bool = True,
 ) -> list[LocalTool]:
     tools: list[LocalTool] = []
 
@@ -29,6 +30,9 @@ def build_local_tools(
 
     if desec_enabled:
         tools.extend(_desec_tools())
+
+    if dokploy_enabled:
+        tools.extend(_dokploy_tools())
 
     return tools
 
@@ -291,5 +295,136 @@ def _desec_tools() -> list[LocalTool]:
                 "required": ["domain", "subname", "type"],
             },
             func=desec.delete_record,
+        ),
+    ]
+
+
+def _dokploy_tools() -> list[LocalTool]:
+    return [
+        LocalTool(
+            name="dokploy_list_projects",
+            description="List all projects with their apps, databases, and compose services.",
+            input_schema={"type": "object", "properties": {}},
+            func=dokploy.list_projects,
+        ),
+        LocalTool(
+            name="dokploy_get_project",
+            description="Get project details including all apps, databases, and compose services.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "project_id": {
+                        "type": "string",
+                        "description": "The project ID.",
+                    }
+                },
+                "required": ["project_id"],
+            },
+            func=dokploy.get_project,
+        ),
+        LocalTool(
+            name="dokploy_get_application",
+            description="Get application details (source, build config, status, domains, etc.).",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "application_id": {
+                        "type": "string",
+                        "description": "The application ID.",
+                    }
+                },
+                "required": ["application_id"],
+            },
+            func=dokploy.get_application,
+        ),
+        LocalTool(
+            name="dokploy_get_compose",
+            description="Get compose service details (docker-compose config, status, etc.).",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "compose_id": {
+                        "type": "string",
+                        "description": "The compose service ID.",
+                    }
+                },
+                "required": ["compose_id"],
+            },
+            func=dokploy.get_compose,
+        ),
+        LocalTool(
+            name="dokploy_get_postgres",
+            description="Get PostgreSQL database details.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "postgres_id": {
+                        "type": "string",
+                        "description": "The PostgreSQL database ID.",
+                    }
+                },
+                "required": ["postgres_id"],
+            },
+            func=dokploy.get_postgres,
+        ),
+        LocalTool(
+            name="dokploy_get_mysql",
+            description="Get MySQL database details.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "mysql_id": {
+                        "type": "string",
+                        "description": "The MySQL database ID.",
+                    }
+                },
+                "required": ["mysql_id"],
+            },
+            func=dokploy.get_mysql,
+        ),
+        LocalTool(
+            name="dokploy_get_mongo",
+            description="Get MongoDB database details.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "mongo_id": {
+                        "type": "string",
+                        "description": "The MongoDB database ID.",
+                    }
+                },
+                "required": ["mongo_id"],
+            },
+            func=dokploy.get_mongo,
+        ),
+        LocalTool(
+            name="dokploy_get_mariadb",
+            description="Get MariaDB database details.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "mariadb_id": {
+                        "type": "string",
+                        "description": "The MariaDB database ID.",
+                    }
+                },
+                "required": ["mariadb_id"],
+            },
+            func=dokploy.get_mariadb,
+        ),
+        LocalTool(
+            name="dokploy_get_redis",
+            description="Get Redis database details.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "redis_id": {
+                        "type": "string",
+                        "description": "The Redis database ID.",
+                    }
+                },
+                "required": ["redis_id"],
+            },
+            func=dokploy.get_redis,
         ),
     ]

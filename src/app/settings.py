@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     porkbun_secret_key: str = ""
     desec_enabled: bool = True
     desec_token: str = ""
+    dokploy_enabled: bool = True
+    dokploy_url: str = ""
+    dokploy_api_key: str = ""
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(

@@ -51,6 +51,7 @@ def create_app(
         local_tools = build_local_tools(
             porkbun_enabled=settings.porkbun_enabled,
             desec_enabled=settings.desec_enabled,
+            dokploy_enabled=settings.dokploy_enabled,
         )
 
         ctx.agent = build_agent(
