@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from . import porkbun
+from . import desec, porkbun
 
 
 class ToolDisabledError(Exception):
@@ -18,10 +18,22 @@ class LocalTool:
     func: Any
 
 
-def build_local_tools(enabled: bool = True) -> list[LocalTool]:
-    if not enabled:
-        return []
+def build_local_tools(
+    porkbun_enabled: bool = True,
+    desec_enabled: bool = True,
+) -> list[LocalTool]:
+    tools: list[LocalTool] = []
 
+    if porkbun_enabled:
+        tools.extend(_porkbun_tools())
+
+    if desec_enabled:
+        tools.extend(_desec_tools())
+
+    return tools
+
+
+def _porkbun_tools() -> list[LocalTool]:
     return [
         LocalTool(
             name="porkbun_list_domains",
@@ -164,5 +176,120 @@ def build_local_tools(enabled: bool = True) -> list[LocalTool]:
                 "required": ["domain", "type"],
             },
             func=porkbun.delete_record_by_name_type,
+        ),
+    ]
+
+
+def _desec_tools() -> list[LocalTool]:
+    return [
+        LocalTool(
+            name="desec_list_domains",
+            description="List all domains in the deSEC account.",
+            input_schema={"type": "object", "properties": {}},
+            func=desec.list_domains,
+        ),
+        LocalTool(
+            name="desec_retrieve_records",
+            description="Retrieve all DNS records (RRsets) for a domain.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "domain": {
+                        "type": "string",
+                        "description": "The domain name (e.g. example.com)",
+                    }
+                },
+                "required": ["domain"],
+            },
+            func=desec.retrieve_records,
+        ),
+        LocalTool(
+            name="desec_create_record",
+            description="Create a new DNS record (RRset) for a domain.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "domain": {
+                        "type": "string",
+                        "description": "The domain name (e.g. example.com)",
+                    },
+                    "subname": {
+                        "type": "string",
+                        "description": "Subdomain portion (e.g. 'www'). Use '@' or '' for apex.",
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "DNS record type (A, AAAA, CNAME, MX, TXT, SRV, CAA, etc.)",
+                    },
+                    "records": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Array of record content strings (e.g. ['1.2.3.4']).",
+                    },
+                    "ttl": {
+                        "type": "integer",
+                        "description": "Time to live in seconds (default: 3600).",
+                        "default": 3600,
+                    },
+                },
+                "required": ["domain", "type", "records"],
+            },
+            func=desec.create_record,
+        ),
+        LocalTool(
+            name="desec_update_record",
+            description="Update an existing DNS record (RRset) by subname and type.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "domain": {
+                        "type": "string",
+                        "description": "The domain name (e.g. example.com)",
+                    },
+                    "subname": {
+                        "type": "string",
+                        "description": "Subdomain portion. Use '@' or '' for apex.",
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "DNS record type.",
+                    },
+                    "records": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Array of record content strings.",
+                    },
+                    "ttl": {
+                        "type": "integer",
+                        "description": "Time to live in seconds (default: 3600).",
+                        "default": 3600,
+                    },
+                },
+                "required": ["domain", "subname", "type", "records"],
+            },
+            func=desec.update_record,
+        ),
+        LocalTool(
+            name="desec_delete_record",
+            description="Delete a DNS record (RRset) by subname and type.",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "domain": {
+                        "type": "string",
+                        "description": "The domain name (e.g. example.com)",
+                    },
+                    "subname": {
+                        "type": "string",
+                        "description": "Subdomain portion. Use '@' or '' for apex.",
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": "DNS record type.",
+                    },
+                },
+                "required": ["domain", "subname", "type"],
+            },
+            func=desec.delete_record,
         ),
     ]

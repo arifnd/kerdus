@@ -30,6 +30,7 @@ def _redact_message(message: str) -> str:
         settings.llm_api_key,
         settings.porkbun_api_key,
         settings.porkbun_secret_key,
+        settings.desec_token,
     ]
     secrets = [s for s in secrets if s]
     for secret in secrets:

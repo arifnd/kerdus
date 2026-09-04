@@ -20,7 +20,7 @@ class FakeLLM:
 
 
 def make_agent(llm: FakeLLM, max_iterations: int = 5, max_tool_result_chars: int = 4000) -> Agent:
-    local_tools = build_local_tools(enabled=True)
+    local_tools = build_local_tools(porkbun_enabled=True, desec_enabled=True)
     return Agent(
         llm=llm,
         local_tools=local_tools,

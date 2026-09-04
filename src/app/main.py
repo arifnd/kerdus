@@ -47,7 +47,11 @@ def create_app(
             llm_retry_base_seconds=config.agent.llm_retry_base_seconds,
         )
 
-        local_tools = build_local_tools(enabled=get_settings().porkbun_enabled)
+        settings = get_settings()
+        local_tools = build_local_tools(
+            porkbun_enabled=settings.porkbun_enabled,
+            desec_enabled=settings.desec_enabled,
+        )
 
         ctx.agent = build_agent(
             llm=ctx.llm,
