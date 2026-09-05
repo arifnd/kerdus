@@ -70,6 +70,7 @@ def create_app(
             await ctx.telegram.start()
             ctx.ready = True
             log.info("application ready")
+            await ctx.telegram.send_alert("Service is back online.")
         except Exception as exc:  # noqa: BLE001 - app can run without the bot up
             log.error("failed to start telegram bot: {}", exc)
             ctx.ready = False
