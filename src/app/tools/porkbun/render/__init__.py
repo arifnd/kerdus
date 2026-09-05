@@ -6,14 +6,18 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader
 
 _TEMPLATE_DIR = Path(__file__).parent
-_ENV = Environment(loader=FileSystemLoader(str(_TEMPLATE_DIR)), autoescape=True)
+_ENV = Environment(
+    loader=FileSystemLoader(str(_TEMPLATE_DIR)),
+    autoescape=True,
+    trim_blocks=True,
+)
 
 
 def _render(template: str, **context: Any) -> str:
     return _ENV.get_template(template).render(**context).strip()
 
 
-def render_domains(domains: list[Any]) -> str:
+def _domain_names(domains: list[Any]) -> list[str]:
     names: list[str] = []
     for domain in domains:
         if isinstance(domain, str):
@@ -24,7 +28,11 @@ def render_domains(domains: list[Any]) -> str:
         name = domain.get("domain") or domain.get("name")
         if name:
             names.append(str(name))
-    return _render("domains.html", domains=names)
+    return names
+
+
+def render_domains(result: dict[str, Any]) -> str:
+    return _render("domains.html", domains=_domain_names(result.get("domains", [])))
 
 
 def _record_content(record: dict[str, Any]) -> str:
@@ -36,10 +44,20 @@ def _record_content(record: dict[str, Any]) -> str:
     return str(content)
 
 
-def render_records(records: list[Any]) -> str:
+def _record_suffix(record: dict[str, Any]) -> str:
+    parts: list[str] = []
+    if record.get("id"):
+        parts.append(f"id={record['id']}")
+    if record.get("ttl") not in (None, ""):
+        parts.append(f"ttl={record['ttl']}")
+    return f" ({', '.join(parts)})" if parts else ""
+
+
+def render_records(result: dict[str, Any]) -> str:
+    domain = str(result.get("domain") or "")
     rows: list[dict[str, Any]] = []
     seen: set[tuple[str, str, str]] = set()
-    for record in records:
+    for record in result.get("records", []):
         if not isinstance(record, dict):
             continue
         name = str(record.get("name") or record.get("subname") or "@")
@@ -54,8 +72,11 @@ def render_records(records: list[Any]) -> str:
                 "type": record_type,
                 "name": name,
                 "content": content,
-                "id": record.get("id"),
-                "ttl": record.get("ttl"),
+                "suffix": _record_suffix(record),
             }
         )
-    return _render("records.html", records=rows)
+    body = _render("records.html", domain=domain, records=rows)
+    cloudflare = result.get("cloudflare")
+    if isinstance(cloudflare, str) and cloudflare.lower() in {"1", "true", "yes"}:
+        body = "This domain uses Cloudflare, so only some records are editable here.\n\n" + body
+    return body

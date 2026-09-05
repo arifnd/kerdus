@@ -1,3 +1,4 @@
-{% for domain in domains %}<code>{{ domain }}</code>
-{% else %}No domains found.
-{% endfor %}
+{% if domains %}Here are the domains in your deSEC account:
+{% for domain in domains %}
+• {{ domain }}
+{% endfor %}{% else %}No domains found.{% endif %}

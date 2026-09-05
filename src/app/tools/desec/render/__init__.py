@@ -6,14 +6,18 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader
 
 _TEMPLATE_DIR = Path(__file__).parent
-_ENV = Environment(loader=FileSystemLoader(str(_TEMPLATE_DIR)), autoescape=True)
+_ENV = Environment(
+    loader=FileSystemLoader(str(_TEMPLATE_DIR)),
+    autoescape=True,
+    trim_blocks=True,
+)
 
 
 def _render(template: str, **context: Any) -> str:
     return _ENV.get_template(template).render(**context).strip()
 
 
-def render_domains(domains: list[Any]) -> str:
+def _domain_names(domains: list[Any]) -> list[str]:
     names: list[str] = []
     for domain in domains:
         if isinstance(domain, str):
@@ -24,12 +28,23 @@ def render_domains(domains: list[Any]) -> str:
         name = domain.get("name") or domain.get("domain")
         if name:
             names.append(str(name))
-    return _render("domains.html", domains=names)
+    return names
 
 
-def render_records(rrsets: list[Any]) -> str:
+def render_domains(result: dict[str, Any]) -> str:
+    return _render("domains.html", domains=_domain_names(result.get("domains", [])))
+
+
+def _record_suffix(rrset: dict[str, Any]) -> str:
+    if rrset.get("ttl") in (None, ""):
+        return ""
+    return f" (ttl={rrset['ttl']})"
+
+
+def render_records(result: dict[str, Any]) -> str:
+    domain = str(result.get("domain") or "")
     rows: list[dict[str, Any]] = []
-    for rrset in rrsets:
+    for rrset in result.get("rrsets", []):
         if not isinstance(rrset, dict):
             continue
         subname = str(rrset.get("subname") or "@")
@@ -40,7 +55,7 @@ def render_records(rrsets: list[Any]) -> str:
                 "type": record_type,
                 "name": subname,
                 "content": content,
-                "ttl": rrset.get("ttl"),
+                "suffix": _record_suffix(rrset),
             }
         )
-    return _render("records.html", records=rows)
+    return _render("records.html", domain=domain, records=rows)

@@ -1,3 +1,4 @@
-{% for record in records %}<code>{{ record.type }} {{ record.name }}</code> -> {{ record.content }}{% if record.ttl %} (ttl={{ record.ttl }}){% endif %}
-{% else %}No DNS records found.
-{% endfor %}
+{% if records %}Here are the DNS records for the domain {{ domain }}:
+{% for record in records %}
+• {{ record.type }} {{ record.name }} -> {{ record.content }}{{ record.suffix }}
+{% endfor %}{% else %}No DNS records found.{% endif %}

@@ -83,12 +83,12 @@ class TestDokployRender:
             {"id": "proj-2", "name": "stats"},
         ]
         assert render_projects(projects) == (
-            "<code>blog</code> (proj-1)\n<code>stats</code> (proj-2)"
+            "Here are the projects in your Dokploy account:\n• blog (proj-1)\n• stats (proj-2)"
         )
 
     def test_render_projects_missing_name_or_id(self) -> None:
         assert render_projects([{"name": "no-id"}, {"id": "no-name"}]) == (
-            "<code>no-id</code>\n<code>no-name</code>"
+            "Here are the projects in your Dokploy account:\n• no-id\n• no-name"
         )
 
     def test_render_projects_empty(self) -> None:

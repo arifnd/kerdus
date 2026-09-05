@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import dataclass
 from typing import Any
 
 from jsonschema import Draft202012Validator
@@ -16,6 +17,12 @@ log = get_logger("agent")
 
 class ToolArgumentError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class AgentReply:
+    text: str
+    raw_html: bool = False
 
 
 class Agent:
@@ -65,17 +72,19 @@ class Agent:
             for t in self._local_tools
         ]
 
-    async def _dispatch(self, name: str, arguments: dict[str, Any]) -> str:
+    async def _dispatch(self, name: str, arguments: dict[str, Any]) -> AgentReply:
         local = next((t for t in self._local_tools if t.name == name), None)
         if local is not None:
             try:
                 result = await local.func(**arguments)
             except TypeError as exc:
                 raise ToolArgumentError(f"invalid arguments for {name}: {exc}") from exc
-            return _truncate(_stringify(result), self._max_tool_result_chars)
+            if local.render is not None:
+                return AgentReply(_stringify(local.render(result)), raw_html=True)
+            return AgentReply(_truncate(_stringify(result), self._max_tool_result_chars))
         raise ToolArgumentError(f"unknown tool: {name}")
 
-    async def handle(self, user_text: str) -> str:
+    async def handle(self, user_text: str) -> AgentReply:
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user_text},
@@ -88,10 +97,10 @@ class Agent:
                 response = await self._llm.complete(messages, tools)
             except Exception as exc:  # noqa: BLE001 - surface as user-facing error
                 log.error("LLM error: {}", exc)
-                return "I couldn't process that request right now."
+                return AgentReply("I couldn't process that request right now.")
 
             if not response.wants_tool:
-                return response.text or ""
+                return AgentReply(response.text or "")
 
             if response.assistant_message is not None:
                 messages.append(dict(response.assistant_message))
@@ -100,13 +109,13 @@ class Agent:
                 start = asyncio.get_event_loop().time()
                 try:
                     await self._validate_arguments(call.name, call.arguments)
-                    result_text = await self._dispatch(call.name, call.arguments)
+                    result = await self._dispatch(call.name, call.arguments)
                     log.debug(
                         "iteration={} tool={} duration_ms={:.0f} result_chars={}",
                         iteration,
                         call.name,
                         (asyncio.get_event_loop().time() - start) * 1000,
-                        len(result_text),
+                        len(result.text),
                     )
                 except ToolArgumentError as exc:
                     messages.append(
@@ -127,17 +136,21 @@ class Agent:
                     )
                     continue
 
+                if result.raw_html:
+                    return result
                 messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": call.tool_call_id,
-                        "content": result_text,
+                        "content": result.text,
                     }
                 )
 
             iteration += 1
 
-        return "I couldn't complete that request in the allowed number of steps. Try being more specific."
+        return AgentReply(
+            "I couldn't complete that request in the allowed number of steps. Try being more specific."
+        )
 
 
 def _stringify(value: Any) -> str:

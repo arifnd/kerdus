@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from app.agent.agent import Agent
+from app.agent.agent import Agent, AgentReply
 from app.agent.llm import LLMResponse, ToolCall
-from app.tools import LocalTool, build_local_tools
+from app.tools import LocalTool
 
 
 class FakeLLM:
@@ -19,8 +19,20 @@ class FakeLLM:
         return self.script.pop(0)
 
 
+def _noop_tool(name: str, **schema: object) -> LocalTool:
+    return LocalTool(
+        name=name,
+        description=f"{name} tool",
+        input_schema={"type": "object", "properties": schema, "required": list(schema)},
+        func=(lambda **kw: "tool result"),
+    )
+
+
 def make_agent(llm: FakeLLM, max_iterations: int = 5, max_tool_result_chars: int = 4000) -> Agent:
-    local_tools = build_local_tools(porkbun_enabled=True, desec_enabled=True)
+    local_tools = [
+        _noop_tool("porkbun_list_domains"),
+        _noop_tool("porkbun_retrieve_records", domain={"type": "string"}),
+    ]
     return Agent(
         llm=llm,
         local_tools=local_tools,
@@ -33,7 +45,9 @@ def make_agent(llm: FakeLLM, max_iterations: int = 5, max_tool_result_chars: int
 async def test_no_tool_needed_returns_text() -> None:
     llm = FakeLLM([LLMResponse(text="Hello there")])
     agent = make_agent(llm)
-    assert await agent.handle("hi") == "Hello there"
+    result = await agent.handle("hi")
+    assert result == AgentReply("Hello there")
+    assert result.raw_html is False
 
 
 @pytest.mark.asyncio
@@ -46,7 +60,7 @@ async def test_single_local_tool_call() -> None:
     )
     agent = make_agent(llm)
     result = await agent.handle("list my domains")
-    assert result == "You have 3 domains."
+    assert result == AgentReply("You have 3 domains.")
 
 
 @pytest.mark.asyncio
@@ -62,7 +76,7 @@ async def test_max_iterations_exceeded() -> None:
     llm = LoopLLM()
     agent = make_agent(llm, max_iterations=3)
     result = await agent.handle("loop")
-    assert "allowed number of steps" in result
+    assert "allowed number of steps" in result.text
     assert llm.calls == 3
 
 
@@ -73,7 +87,8 @@ async def test_llm_error_message() -> None:
             raise RuntimeError("boom")
 
     agent = make_agent(BoomLLM())
-    assert await agent.handle("hi") == "I couldn't process that request right now."
+    result = await agent.handle("hi")
+    assert result == AgentReply("I couldn't process that request right now.")
 
 
 @pytest.mark.asyncio
@@ -161,8 +176,51 @@ async def test_tool_result_truncated() -> None:
         max_tool_result_chars=50,
     )
     result = await agent._dispatch("long_tool", {})
-    assert "truncated" in result
-    assert len(result) < len(long_result)
+    assert "truncated" in result.text
+    assert len(result.text) < len(long_result)
+
+
+@pytest.mark.asyncio
+async def test_tool_with_render_short_circuits() -> None:
+    async def _render_tool(**kwargs: object) -> dict[str, object]:
+        return {"domains": [{"name": "example.com"}]}
+
+    rendered_tool = LocalTool(
+        name="rendered_tool",
+        description="returns a renderable result",
+        input_schema={"type": "object", "properties": {}},
+        func=_render_tool,
+        render=lambda result: f"RENDERED:{result}",
+    )
+    llm = FakeLLM(
+        [
+            LLMResponse(
+                tool_calls=[ToolCall(name="rendered_tool", arguments={})],
+                assistant_message={
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_1",
+                            "type": "function",
+                            "function": {"name": "rendered_tool", "arguments": "{}"},
+                        }
+                    ],
+                },
+            ),
+            LLMResponse(text="should never be reached"),
+        ]
+    )
+    agent = Agent(
+        llm=llm,
+        local_tools=[rendered_tool],
+        max_iterations=5,
+        max_tool_result_chars=4000,
+    )
+    result = await agent.handle("render")
+    assert result.raw_html is True
+    assert "RENDERED:" in result.text
+    assert len(llm.calls) == 1
 
 
 @pytest.mark.asyncio
@@ -202,4 +260,4 @@ async def test_set_local_tools_setter() -> None:
     agent = make_agent(llm)
     agent.set_local_tools([custom_tool])
     result = await agent.handle("do custom")
-    assert result == "done"
+    assert result == AgentReply("done")

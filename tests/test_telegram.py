@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.agent.agent import AgentReply
 from app.config import TelegramConfig
 from app.telegram.bot import TelegramBot
 
@@ -44,8 +45,8 @@ class TestTelegramBotAuthorization:
     async def test_authorized_user_is_handled(self) -> None:
         replies: list[str] = []
 
-        async def handler(text: str) -> str:
-            return f"echo:{text}"
+        async def handler(text: str) -> AgentReply:
+            return AgentReply(f"echo:{text}")
 
         bot = make_bot(111, handler)
         msg = FakeMessage("hello", 999, replies)
@@ -74,11 +75,22 @@ class TestTelegramBotAuthorization:
         await bot._on_message(FakeUpdate(FakeUser(111), msg), None)
         assert replies == ["I couldn't complete that request right now."]
 
-    async def test_processing_hint_sends_placeholder_then_edits(self) -> None:
+    async def test_unhandled_reply_type_raises(self) -> None:
         replies: list[str] = []
 
         async def handler(text: str) -> str:
-            return "real reply"
+            return "plain"
+
+        bot = make_bot(111, handler)
+        msg = FakeMessage("hello", 999, replies)
+        await bot._on_message(FakeUpdate(FakeUser(111), msg), None)
+        assert replies == ["I couldn't complete that request right now."]
+
+    async def test_processing_hint_sends_placeholder_then_edits(self) -> None:
+        replies: list[str] = []
+
+        async def handler(text: str) -> AgentReply:
+            return AgentReply("real reply")
 
         bot = make_bot(111, handler)
         bot.set_processing_hint(True)
@@ -90,8 +102,8 @@ class TestTelegramBotAuthorization:
     async def test_long_reply_chunked(self) -> None:
         replies: list[str] = []
 
-        async def handler(text: str) -> str:
-            return "A" * 5000
+        async def handler(text: str) -> AgentReply:
+            return AgentReply("A" * 5000)
 
         bot = make_bot(111, handler)
         msg = FakeMessage("hello", 999, replies)
@@ -103,8 +115,8 @@ class TestTelegramBotAuthorization:
     async def test_long_reply_chunked_with_placeholder(self) -> None:
         replies: list[str] = []
 
-        async def handler(text: str) -> str:
-            return "B" * 5000
+        async def handler(text: str) -> AgentReply:
+            return AgentReply("B" * 5000)
 
         bot = make_bot(111, handler)
         bot.set_processing_hint(True)
@@ -114,3 +126,31 @@ class TestTelegramBotAuthorization:
         assert len(replies) == 2
         for r in replies:
             assert len(r) <= 4096
+
+    async def test_raw_html_passthrough(self) -> None:
+        replies: list[str] = []
+
+        async def handler(text: str) -> AgentReply:
+            return AgentReply("<b>bold</b>", raw_html=True)
+
+        bot = make_bot(111, handler)
+        msg = FakeMessage("hello", 999, replies)
+        await bot._on_message(FakeUpdate(FakeUser(111), msg), None)
+        assert replies == ["<b>bold</b>"]
+
+    async def test_raw_html_passthrough_with_processing_hint(self) -> None:
+        replies: list[str] = []
+
+        async def handler(text: str) -> AgentReply:
+            return AgentReply("<code>x</code>", raw_html=True)
+
+        bot = make_bot(111, handler)
+        bot.set_processing_hint(True)
+        msg = FakeMessage("hello", 999, replies)
+        await bot._on_message(FakeUpdate(FakeUser(111), msg), None)
+        assert replies == ["<code>x</code>"]
+
+
+class TestTelegramBotMisc:
+    def test_handler_type_is_async(self) -> None:
+        assert hasattr(TelegramBot, "_handle_and_reply")

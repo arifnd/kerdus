@@ -6,7 +6,6 @@ import httpx
 
 from ...logging import get_logger
 from ...settings import get_settings
-from .render import render_projects
 
 log = get_logger("tools.dokploy")
 
@@ -94,8 +93,8 @@ def _sanitized(data: Any) -> Any:
     return _strip_secrets(data)
 
 
-async def list_projects() -> str:
-    return render_projects(_sanitized(await _get("project.all")))
+async def list_projects() -> list[Any]:
+    return _sanitized(await _get("project.all"))
 
 
 async def get_project(project_id: str) -> dict[str, Any]:

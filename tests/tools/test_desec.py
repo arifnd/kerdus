@@ -41,23 +41,27 @@ class TestDeSecToolSchemas:
 
 class TestDeSecRender:
     def test_render_domains(self) -> None:
-        domains = [{"name": "example.com"}, {"name": "dedyn.io"}]
-        assert render_domains(domains) == (
-            "<code>example.com</code>\n<code>dedyn.io</code>"
+        result = {"domains": [{"name": "example.com"}, {"name": "dedyn.io"}]}
+        assert render_domains(result) == (
+            "Here are the domains in your deSEC account:\n• example.com\n• dedyn.io"
         )
 
     def test_render_domains_empty(self) -> None:
-        assert render_domains([]) == "No domains found."
+        assert render_domains({"domains": []}) == "No domains found."
 
     def test_render_records(self) -> None:
-        rrsets = [
-            {"type": "A", "subname": "www", "records": ["1.2.3.4", "5.6.7.8"], "ttl": 3600},
-            {"type": "A", "subname": "", "records": ["9.9.9.9"]},
-        ]
-        assert render_records(rrsets) == (
-            '<code>A www</code> -> 1.2.3.4, 5.6.7.8 (ttl=3600)\n'
-            '<code>A @</code> -> 9.9.9.9'
+        result = {
+            "domain": "example.com",
+            "rrsets": [
+                {"type": "A", "subname": "www", "records": ["1.2.3.4", "5.6.7.8"], "ttl": 3600},
+                {"type": "A", "subname": "", "records": ["9.9.9.9"]},
+            ],
+        }
+        assert render_records(result) == (
+            "Here are the DNS records for the domain example.com:\n"
+            "• A www -> 1.2.3.4, 5.6.7.8 (ttl=3600)\n"
+            "• A @ -> 9.9.9.9"
         )
 
     def test_render_records_empty(self) -> None:
-        assert render_records([]) == "No DNS records found."
+        assert render_records({"domain": "example.com", "rrsets": []}) == "No DNS records found."

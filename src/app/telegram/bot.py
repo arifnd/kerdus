@@ -8,6 +8,7 @@ from typing import Any
 from telegram import Message, Update
 from telegram.ext import Application, ApplicationBuilder, ContextTypes, MessageHandler, filters
 
+from ..agent.agent import AgentReply
 from ..config import TelegramConfig
 from ..formatter import markdown_to_telegram_html, split_telegram_message
 from ..logging import clear_request_id, get_logger, set_request_id
@@ -15,7 +16,7 @@ from ..settings import get_settings
 
 log = get_logger("telegram")
 
-AgentHandler = Callable[[str], Awaitable[str]]
+AgentHandler = Callable[[str], Awaitable[AgentReply]]
 
 _PLACEHOLDER = "\u2026"
 
@@ -64,14 +65,20 @@ class TelegramBot:
 
             reply = await self._handle_message(message.text)
 
-            chunks = split_telegram_message(reply)
-            if placeholder_msg:
-                await _edit_formatted(placeholder_msg, chunks[0])
-                for chunk in chunks[1:]:
-                    await _send_formatted(message.reply_text, chunk)
+            if reply.raw_html:
+                if placeholder_msg:
+                    await _send_raw_html(placeholder_msg.edit_text, reply.text)
+                else:
+                    await _send_raw_html(message.reply_text, reply.text)
             else:
-                for chunk in chunks:
-                    await _send_formatted(message.reply_text, chunk)
+                chunks = split_telegram_message(reply.text)
+                if placeholder_msg:
+                    await _edit_formatted(placeholder_msg, chunks[0])
+                    for chunk in chunks[1:]:
+                        await _send_formatted(message.reply_text, chunk)
+                else:
+                    for chunk in chunks:
+                        await _send_formatted(message.reply_text, chunk)
 
         except Exception as exc:  # noqa: BLE001 - never crash the handler
             log.error("agent handler error: {}", exc)
@@ -140,6 +147,14 @@ async def _send_formatted(send_fn: Callable[..., Awaitable[Any]], text: str) -> 
         await send_fn(html, parse_mode="HTML")
     except Exception:  # noqa: BLE001 – invalid markup, fall back
         await send_fn(text)
+
+
+async def _send_raw_html(send_fn: Callable[..., Awaitable[Any]], text: str) -> None:
+    """Send pre-rendered Telegram HTML without any markdown conversion."""
+    try:
+        await send_fn(text, parse_mode="HTML")
+    except Exception as exc:  # noqa: BLE001 - never crash the handler
+        log.error("failed to send raw html: {}", exc)
 
 
 async def _edit_formatted(message: Message, text: str) -> None:

@@ -6,7 +6,6 @@ import httpx
 
 from ...logging import get_logger
 from ...settings import get_settings
-from .render import render_domains, render_records
 
 log = get_logger("tools.porkbun")
 
@@ -44,21 +43,21 @@ async def _post(path: str, body: dict[str, Any] | None = None) -> dict[str, Any]
     return data
 
 
-async def list_domains(include_all: bool = False) -> str:
+async def list_domains(include_all: bool = False) -> dict[str, Any]:
     body: dict[str, Any] = {}
     if not include_all:
         body["apiAccess"] = "yes"
     data = await _post("domain/listAll", body)
-    return render_domains(data.get("domains", []))
+    return {"domains": data.get("domains", [])}
 
 
-async def retrieve_records(domain: str) -> str:
+async def retrieve_records(domain: str) -> dict[str, Any]:
     data = await _post(f"dns/retrieve/{domain}")
-    text = render_records(data.get("records", []))
-    cloudflare = data.get("cloudflare")
-    if isinstance(cloudflare, (bool, str)) and not cloudflare in (False, "no", "No"):
-        text = f"This domain uses Cloudflare, so records are managed via Cloudflare and only some are editable here.\n{text}"
-    return text
+    return {
+        "domain": domain,
+        "cloudflare": data.get("cloudflare", "no"),
+        "records": data.get("records", []),
+    }
 
 
 async def create_record(

@@ -14,3 +14,4 @@ class LocalTool:
     description: str
     input_schema: dict[str, Any]
     func: Any
+    render: Any = None
