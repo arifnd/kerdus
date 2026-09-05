@@ -14,6 +14,7 @@ from .logging import get_logger, setup_logging
 from .settings import get_settings
 from .telegram.bot import TelegramBot
 from .tools import build_local_tools
+from .version import get_version
 
 log = get_logger("main")
 
@@ -69,7 +70,7 @@ def create_app(
         try:
             await ctx.telegram.start()
             ctx.ready = True
-            log.info("application ready")
+            log.info("application ready: version={}", get_version())
             await ctx.telegram.send_alert("Service is back online.")
         except Exception as exc:  # noqa: BLE001 - app can run without the bot up
             log.error("failed to start telegram bot: {}", exc)
