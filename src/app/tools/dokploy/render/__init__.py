@@ -5,6 +5,8 @@ from typing import Any
 
 from jinja2 import Environment, FileSystemLoader
 
+from ....settings import get_settings
+
 _TEMPLATE_DIR = Path(__file__).parent
 _ENV = Environment(
     loader=FileSystemLoader(str(_TEMPLATE_DIR)),
@@ -49,6 +51,34 @@ def _format_items(items: list[Any], id_key: str = "id", name_key: str = "name") 
     return lines
 
 
+def _parse_env(env: Any) -> list[str]:
+    if isinstance(env, dict):
+        return [f"{k}={v}" for k, v in env.items()]
+    if isinstance(env, str):
+        return [line.strip() for line in env.split("\n") if line.strip() and "=" in line]
+    return []
+
+
+def _service_rows(items: list[Any], id_key: str, name_key: str) -> list[dict[str, Any]]:
+    show_env = get_settings().dokploy_show_secret
+    rows: list[dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        pair = _id_name(item, id_key, name_key)
+        if pair is None:
+            continue
+        item_id, name = pair
+        label = f"{name} ({item_id})" if name and item_id else name or item_id
+        rows.append(
+            {
+                "label": label,
+                "env": _parse_env(item.get("env")) if show_env else [],
+            }
+        )
+    return rows
+
+
 def render_projects(result: dict[str, Any]) -> str:
     projects = result if isinstance(result, list) else result.get("projects", [])
     rows = _format_items(projects)
@@ -59,26 +89,14 @@ def render_project(result: dict[str, Any]) -> str:
     project = result if isinstance(result, dict) else {}
     name = str(project.get("name") or "")
     project_id = str(project.get("id") or "")
-    apps = _format_items(
-        [
-            {"id": app.get("appId"), "name": app.get("appName")}
-            for app in project.get("applications", [])
-            if isinstance(app, dict)
-        ]
-    )
-    composes = _format_items(
-        [
-            {"id": c.get("composeId"), "name": c.get("composeName")}
-            for c in project.get("composes", [])
-            if isinstance(c, dict)
-        ]
-    )
-    databases = _format_items(
-        [
-            {"id": db.get("databaseId"), "name": db.get("name")}
-            for db in project.get("databases", [])
-            if isinstance(db, dict)
-        ]
+    apps = _service_rows(project.get("applications", []), "appId", "appName")
+    composes = _service_rows(project.get("composes", []), "composeId", "composeName")
+    databases = (
+        _service_rows(project.get("postgres", []), "databaseId", "name")
+        + _service_rows(project.get("mysql", []), "databaseId", "name")
+        + _service_rows(project.get("mariadb", []), "databaseId", "name")
+        + _service_rows(project.get("mongo", []), "databaseId", "name")
+        + _service_rows(project.get("redis", []), "databaseId", "name")
     )
     return _render(
         "project.html",

@@ -98,32 +98,32 @@ async def list_projects() -> list[Any]:
 
 
 async def get_project(project_id: str) -> dict[str, Any]:
-    return _sanitized(await _get("project.one", params={"projectId": project_id}))
+    return await _get("project.one", params={"projectId": project_id})
 
 
 async def get_application(application_id: str) -> dict[str, Any]:
-    return _sanitized(await _get("application.one", params={"applicationId": application_id}))
+    return await _get("application.one", params={"applicationId": application_id})
 
 
 async def get_compose(compose_id: str) -> dict[str, Any]:
-    return _sanitized(await _get("compose.one", params={"composeId": compose_id}))
+    return await _get("compose.one", params={"composeId": compose_id})
 
 
 async def get_postgres(postgres_id: str) -> dict[str, Any]:
-    return _sanitized(await _get("postgres.one", params={"postgresId": postgres_id}))
+    return await _get("postgres.one", params={"postgresId": postgres_id})
 
 
 async def get_mysql(mysql_id: str) -> dict[str, Any]:
-    return _sanitized(await _get("mysql.one", params={"mysqlId": mysql_id}))
+    return await _get("mysql.one", params={"mysqlId": mysql_id})
 
 
 async def get_mongo(mongo_id: str) -> dict[str, Any]:
-    return _sanitized(await _get("mongo.one", params={"mongoId": mongo_id}))
+    return await _get("mongo.one", params={"mongoId": mongo_id})
 
 
 async def get_mariadb(mariadb_id: str) -> dict[str, Any]:
-    return _sanitized(await _get("mariadb.one", params={"mariadbId": mariadb_id}))
+    return await _get("mariadb.one", params={"mariadbId": mariadb_id})
 
 
 async def get_redis(redis_id: str) -> dict[str, Any]:
-    return _sanitized(await _get("redis.one", params={"redisId": redis_id}))
+    return await _get("redis.one", params={"redisId": redis_id})

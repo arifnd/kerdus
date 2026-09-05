@@ -1,12 +1,15 @@
 Project: {{ name }}
 {% if project_id %}ID: {{ project_id }}
 {% endif %}{% if apps %}Applications:
-{% for app in apps %}
-• {{ app }}
-{% endfor %}{% endif %}{% if composes %}Compose services:
-{% for compose in composes %}
-• {{ compose }}
-{% endfor %}{% endif %}{% if databases %}Databases:
-{% for database in databases %}
-• {{ database }}
-{% endfor %}{% endif %}
+{% for app in apps %}• {{ app.label }}
+{% if app.env %}  ENV:
+{% for line in app.env %}    {{ line }}
+{% endfor %}{% endif %}{% endfor %}{% endif %}{% if databases %}Databases:
+{% for db in databases %}• {{ db.label }}
+{% if db.env %}  ENV:
+{% for line in db.env %}    {{ line }}
+{% endfor %}{% endif %}{% endfor %}{% endif %}{% if composes %}Compose:
+{% for compose in composes %}• {{ compose.label }}
+{% if compose.env %}  ENV:
+{% for line in compose.env %}    {{ line }}
+{% endfor %}{% endif %}{% endfor %}{% endif %}
