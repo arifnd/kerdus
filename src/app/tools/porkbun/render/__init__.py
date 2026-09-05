@@ -44,10 +44,17 @@ def _record_content(record: dict[str, Any]) -> str:
     return str(content)
 
 
+def _record_values(record: dict[str, Any]) -> list[str]:
+    content = record.get("content")
+    if content is None:
+        content = record.get("records", [])
+    if isinstance(content, list):
+        return [str(item) for item in content]
+    return [str(content)]
+
+
 def _record_suffix(record: dict[str, Any]) -> str:
     parts: list[str] = []
-    if record.get("id"):
-        parts.append(f"id={record['id']}")
     if record.get("ttl") not in (None, ""):
         parts.append(f"ttl={record['ttl']}")
     return f" ({', '.join(parts)})" if parts else ""
@@ -55,7 +62,7 @@ def _record_suffix(record: dict[str, Any]) -> str:
 
 def render_records(result: dict[str, Any]) -> str:
     domain = str(result.get("domain") or "")
-    rows: list[dict[str, Any]] = []
+    groups: dict[str, list[dict[str, Any]]] = {}
     seen: set[tuple[str, str, str]] = set()
     for record in result.get("records", []):
         if not isinstance(record, dict):
@@ -67,15 +74,16 @@ def render_records(result: dict[str, Any]) -> str:
         if key in seen:
             continue
         seen.add(key)
-        rows.append(
+        groups.setdefault(record_type, []).append(
             {
-                "type": record_type,
                 "name": name,
                 "content": content,
+                "values": _record_values(record),
                 "suffix": _record_suffix(record),
             }
         )
-    body = _render("records.html", domain=domain, records=rows)
+    rows = [{"type": t, "records": records} for t, records in groups.items()]
+    body = _render("records.html", domain=domain, groups=rows)
     cloudflare = result.get("cloudflare")
     if isinstance(cloudflare, str) and cloudflare.lower() in {"1", "true", "yes"}:
         body = "This domain uses Cloudflare, so only some records are editable here.\n\n" + body

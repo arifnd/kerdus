@@ -1,4 +1,6 @@
-{% if records %}Here are the DNS records for the domain {{ domain }}:
-{% for record in records %}
-• {{ record.type }} {{ record.name }} -> {{ record.content }}{{ record.suffix }}
-{% endfor %}{% else %}No DNS records found.{% endif %}
+{% if groups %}Here are the DNS records for the domain {{ domain }}:
+{% for group in groups %}{{ group.type }} Records
+{% for record in group.records %}{% if group.type|upper == "TXT" and record["values"]|length > 0 %}• {{ record.name }}:{{ record.suffix }}
+{% for value in record["values"] %}  {{ value }}
+{% endfor %}{% else %}• {{ record.name }}: {{ record.content }}{{ record.suffix }}
+{% endif %}{% endfor %}{{ "\n" if not loop.last }}{% endfor %}{% else %}No DNS records found.{% endif %}

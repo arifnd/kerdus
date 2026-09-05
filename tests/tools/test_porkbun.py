@@ -83,11 +83,15 @@ class TestPorkbunRender:
         }
         assert render_records(result) == (
             "Here are the DNS records for the domain example.com:\n"
-            "• A www -> 1.2.3.4 (ttl=600)\n"
-            "• TXT @ -> v=spf1"
+            "A Records\n"
+            "• www: 1.2.3.4 (ttl=600)\n"
+            "\n"
+            "TXT Records\n"
+            "• @:\n"
+            "  v=spf1"
         )
 
-    def test_render_records_includes_id(self) -> None:
+    def test_render_records_ignores_id(self) -> None:
         result = {
             "domain": "example.com",
             "records": [
@@ -96,7 +100,27 @@ class TestPorkbunRender:
         }
         assert render_records(result) == (
             "Here are the DNS records for the domain example.com:\n"
-            "• CNAME api -> foo.example.com (id=1234)"
+            "CNAME Records\n"
+            "• api: foo.example.com"
+        )
+
+    def test_render_records_txt_multiline(self) -> None:
+        result = {
+            "domain": "example.com",
+            "records": [
+                {
+                    "type": "TXT",
+                    "name": "@",
+                    "content": ["v=spf1 include:_spf.example.com", "google-site-verification=abc"],
+                },
+            ],
+        }
+        assert render_records(result) == (
+            "Here are the DNS records for the domain example.com:\n"
+            "TXT Records\n"
+            "• @:\n"
+            "  v=spf1 include:_spf.example.com\n"
+            "  google-site-verification=abc"
         )
 
     def test_render_records_empty(self) -> None:

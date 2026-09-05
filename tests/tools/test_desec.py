@@ -59,8 +59,41 @@ class TestDeSecRender:
         }
         assert render_records(result) == (
             "Here are the DNS records for the domain example.com:\n"
-            "• A www -> 1.2.3.4, 5.6.7.8 (ttl=3600)\n"
-            "• A @ -> 9.9.9.9"
+            "A Records\n"
+            "• www: 1.2.3.4, 5.6.7.8 (ttl=3600)\n"
+            "• @: 9.9.9.9"
+        )
+
+    def test_render_records_groups_by_type(self) -> None:
+        result = {
+            "domain": "example.id",
+            "rrsets": [
+                {"type": "A", "subname": "sub", "records": ["43.157.229.229"], "ttl": 3600},
+                {"type": "NS", "subname": "", "records": ["ns2.example.id.", "ns1.example.id."], "ttl": 3600},
+            ],
+        }
+        assert render_records(result) == (
+            "Here are the DNS records for the domain example.id:\n"
+            "A Records\n"
+            "• sub: 43.157.229.229 (ttl=3600)\n"
+            "\n"
+            "NS Records\n"
+            "• @: ns2.example.id., ns1.example.id. (ttl=3600)"
+        )
+
+    def test_render_records_txt_multiline(self) -> None:
+        result = {
+            "domain": "example.com",
+            "rrsets": [
+                {"type": "TXT", "subname": "", "records": ["v=spf1 include:_spf.example.com", "google-site-verification=abc"]},
+            ],
+        }
+        assert render_records(result) == (
+            "Here are the DNS records for the domain example.com:\n"
+            "TXT Records\n"
+            "• @:\n"
+            "  v=spf1 include:_spf.example.com\n"
+            "  google-site-verification=abc"
         )
 
     def test_render_records_empty(self) -> None:

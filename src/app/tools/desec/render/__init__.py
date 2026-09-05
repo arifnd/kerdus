@@ -43,19 +43,21 @@ def _record_suffix(rrset: dict[str, Any]) -> str:
 
 def render_records(result: dict[str, Any]) -> str:
     domain = str(result.get("domain") or "")
-    rows: list[dict[str, Any]] = []
+    groups: dict[str, list[dict[str, Any]]] = {}
     for rrset in result.get("rrsets", []):
         if not isinstance(rrset, dict):
             continue
         subname = str(rrset.get("subname") or "@")
         record_type = str(rrset.get("type", ""))
-        content = ", ".join(str(item) for item in rrset.get("records", []))
-        rows.append(
+        values = [str(item) for item in rrset.get("records", [])]
+        content = ", ".join(values)
+        groups.setdefault(record_type, []).append(
             {
-                "type": record_type,
                 "name": subname,
                 "content": content,
+                "values": values,
                 "suffix": _record_suffix(rrset),
             }
         )
-    return _render("records.html", domain=domain, records=rows)
+    rows = [{"type": t, "records": records} for t, records in groups.items()]
+    return _render("records.html", domain=domain, groups=rows)
