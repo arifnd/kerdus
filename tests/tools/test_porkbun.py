@@ -13,7 +13,8 @@ class TestPorkbunToolSchemas:
         assert tool.input_schema["properties"]["include_all"] == {
             "type": "boolean",
             "description": (
-                "Set to true to include all domains, including those without API access enabled."
+                "Set to true when the user wants every domain in the account, including those "
+                "without API access enabled. Omit or false for API-enabled domains only."
             ),
             "default": False,
         }

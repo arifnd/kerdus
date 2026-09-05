@@ -43,7 +43,9 @@ def _porkbun_tools() -> list[LocalTool]:
             name="porkbun_list_domains",
             description=(
                 "List domains in the Porkbun account. By default only domains with API access "
-                "enabled (status Active) are returned; set include_all to true to list all domains."
+                "enabled (status Active) are returned. When the user asks for ALL domains, a "
+                "complete list, or every domain they own, set include_all to true so all domains "
+                "are returned."
             ),
             input_schema={
                 "type": "object",
@@ -51,8 +53,9 @@ def _porkbun_tools() -> list[LocalTool]:
                     "include_all": {
                         "type": "boolean",
                         "description": (
-                            "Set to true to include all domains, including those without API "
-                            "access enabled."
+                            "Set to true when the user wants every domain in the account, including "
+                            "those without API access enabled. Omit or false for API-enabled "
+                            "domains only."
                         ),
                         "default": False,
                     }
