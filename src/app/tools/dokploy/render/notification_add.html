@@ -1,0 +1,7 @@
+{{ "Created" if created else "Found existing" }} Telegram notification in Dokploy.
+Name: {{ name }}
+ID: {{ notification_id }}
+Chat: {{ chat_id }}
+{% if events %}Events enabled:
+{% for event in events %}• {{ event }}
+{% endfor %}{% endif %}

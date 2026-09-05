@@ -194,3 +194,47 @@ def render_mariadb(result: dict[str, Any]) -> str:
 
 def render_redis(result: dict[str, Any]) -> str:
     return _render_database(result, "Redis", "redisId")
+
+
+def _notification_context(notification: dict[str, Any]) -> dict[str, Any]:
+    telegram = (
+        notification.get("telegram") if isinstance(notification.get("telegram"), dict) else {}
+    )
+    events = [
+        ("App deploy", notification.get("appDeploy")),
+        ("App build error", notification.get("appBuildError")),
+        ("Database backup", notification.get("databaseBackup")),
+        ("Volume backup", notification.get("volumeBackup")),
+        ("Dokploy restart", notification.get("dokployRestart")),
+        ("Dokploy backup", notification.get("dokployBackup")),
+        ("Docker cleanup", notification.get("dockerCleanup")),
+        ("Server threshold", notification.get("serverThreshold")),
+    ]
+    enabled = [label for label, on in events if on]
+    return {
+        "name": _str(notification.get("name")),
+        "notification_id": _str(notification.get("notificationId")),
+        "chat_id": _str(telegram.get("chatId")),
+        "events": enabled,
+    }
+
+
+def render_notification_add(result: dict[str, Any]) -> str:
+    notification = result.get("notification", {}) if isinstance(result, dict) else {}
+    created = bool(result.get("created")) if isinstance(result, dict) else False
+    return _render("notification_add.html", created=created, **_notification_context(notification))
+
+
+def render_notification_delete(result: dict[str, Any]) -> str:
+    notification = result if isinstance(result, dict) else {}
+    return _render(
+        "notification_delete.html",
+        name=_str(notification.get("name")),
+        notification_id=_str(notification.get("notificationId")),
+    )
+
+
+def render_notification_test(result: dict[str, Any]) -> str:
+    sent = bool(result.get("sent")) if isinstance(result, dict) else False
+    chat_id = _str(result.get("chat_id")) if isinstance(result, dict) else ""
+    return _render("notification_test.html", sent=sent, chat_id=chat_id)

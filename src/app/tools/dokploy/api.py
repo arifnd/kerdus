@@ -127,3 +127,34 @@ async def get_mariadb(mariadb_id: str) -> dict[str, Any]:
 
 async def get_redis(redis_id: str) -> dict[str, Any]:
     return await _get("redis.one", params={"redisId": redis_id})
+
+
+async def list_notifications() -> list[Any]:
+    data = await _get("notification.all")
+    return data if isinstance(data, list) else []
+
+
+async def get_notification(notification_id: str) -> dict[str, Any]:
+    return await _get("notification.one", params={"notificationId": notification_id})
+
+
+async def create_telegram_notification(payload: dict[str, Any]) -> None:
+    await _post("notification.createTelegram", payload)
+
+
+async def remove_notification(notification_id: str) -> dict[str, Any]:
+    return await _post("notification.remove", {"notificationId": notification_id})
+
+
+async def test_telegram_connection(
+    bot_token: str,
+    chat_id: str,
+    message_thread_id: str = "",
+) -> bool:
+    body = {
+        "botToken": bot_token,
+        "chatId": chat_id,
+        "messageThreadId": message_thread_id,
+    }
+    result = await _post("notification.testTelegramConnection", body)
+    return result is True
