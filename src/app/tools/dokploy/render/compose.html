@@ -1,0 +1,8 @@
+Compose service: {{ name }}
+{% if compose_id %}ID: {{ compose_id }}
+{% endif %}{% if status %}Status: {{ status }}
+{% endif %}{% if description %}Description: {{ description }}
+{% endif %}{% if domains %}Domains:
+{% for domain in domains %}
+• {{ domain }}
+{% endfor %}{% endif %}

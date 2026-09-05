@@ -1,0 +1,12 @@
+Project: {{ name }}
+{% if project_id %}ID: {{ project_id }}
+{% endif %}{% if apps %}Applications:
+{% for app in apps %}
+• {{ app }}
+{% endfor %}{% endif %}{% if composes %}Compose services:
+{% for compose in composes %}
+• {{ compose }}
+{% endfor %}{% endif %}{% if databases %}Databases:
+{% for database in databases %}
+• {{ database }}
+{% endfor %}{% endif %}

@@ -13,7 +13,17 @@ from .api import (
     get_redis,
     list_projects,
 )
-from .render import render_projects
+from .render import (
+    render_application,
+    render_compose,
+    render_mariadb,
+    render_mongo,
+    render_mysql,
+    render_postgres,
+    render_project,
+    render_projects,
+    render_redis,
+)
 
 __all__ = [
     "DokployAPIError",
@@ -53,6 +63,7 @@ def build_dokploy_tools() -> list[LocalTool]:
                 "required": ["project_id"],
             },
             func=get_project,
+            render=render_project,
         ),
         LocalTool(
             name="dokploy_get_application",
@@ -68,6 +79,7 @@ def build_dokploy_tools() -> list[LocalTool]:
                 "required": ["application_id"],
             },
             func=get_application,
+            render=render_application,
         ),
         LocalTool(
             name="dokploy_get_compose",
@@ -83,6 +95,7 @@ def build_dokploy_tools() -> list[LocalTool]:
                 "required": ["compose_id"],
             },
             func=get_compose,
+            render=render_compose,
         ),
         LocalTool(
             name="dokploy_get_postgres",
@@ -98,6 +111,7 @@ def build_dokploy_tools() -> list[LocalTool]:
                 "required": ["postgres_id"],
             },
             func=get_postgres,
+            render=render_postgres,
         ),
         LocalTool(
             name="dokploy_get_mysql",
@@ -113,6 +127,7 @@ def build_dokploy_tools() -> list[LocalTool]:
                 "required": ["mysql_id"],
             },
             func=get_mysql,
+            render=render_mysql,
         ),
         LocalTool(
             name="dokploy_get_mongo",
@@ -128,6 +143,7 @@ def build_dokploy_tools() -> list[LocalTool]:
                 "required": ["mongo_id"],
             },
             func=get_mongo,
+            render=render_mongo,
         ),
         LocalTool(
             name="dokploy_get_mariadb",
@@ -143,6 +159,7 @@ def build_dokploy_tools() -> list[LocalTool]:
                 "required": ["mariadb_id"],
             },
             func=get_mariadb,
+            render=render_mariadb,
         ),
         LocalTool(
             name="dokploy_get_redis",
@@ -158,5 +175,6 @@ def build_dokploy_tools() -> list[LocalTool]:
                 "required": ["redis_id"],
             },
             func=get_redis,
+            render=render_redis,
         ),
     ]
