@@ -43,9 +43,12 @@ async def _post(path: str, body: dict[str, Any] | None = None) -> dict[str, Any]
     return data
 
 
-async def list_domains() -> dict[str, Any]:
+async def list_domains(include_all: bool = False) -> dict[str, Any]:
     data = await _post("domain/listAll")
-    return {"domains": data.get("domains", [])}
+    domains = data.get("domains", [])
+    if not include_all:
+        domains = [d for d in domains if d.get("status") == "Active"]
+    return {"domains": domains}
 
 
 async def retrieve_records(domain: str) -> dict[str, Any]:
