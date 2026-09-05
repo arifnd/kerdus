@@ -18,6 +18,8 @@ class TestPorkbunToolSchemas:
             ),
             "default": False,
         }
+        assert "status Active" not in tool.description
+        assert "API" in tool.description
 
     def test_retrieve_records_requires_domain(self, tools) -> None:
         tool = _get_tool(tools, "porkbun_retrieve_records")

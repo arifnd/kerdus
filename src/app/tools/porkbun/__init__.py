@@ -28,10 +28,9 @@ def build_porkbun_tools() -> list[LocalTool]:
         LocalTool(
             name="porkbun_list_domains",
             description=(
-                "List domains in the Porkbun account. By default only domains with API access "
-                "enabled (status Active) are returned. When the user asks for ALL domains, a "
-                "complete list, or every domain they own, set include_all to true so all domains "
-                "are returned."
+                "List domains in the Porkbun account. By default only domains opted in to API "
+                "access are returned. When the user asks for ALL domains, a complete list, or "
+                "every domain they own, set include_all to true so all domains are returned."
             ),
             input_schema={
                 "type": "object",
