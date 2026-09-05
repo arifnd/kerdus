@@ -21,7 +21,6 @@ from .render import (
     render_mysql,
     render_postgres,
     render_project,
-    render_projects,
     render_redis,
 )
 
@@ -44,10 +43,12 @@ def build_dokploy_tools() -> list[LocalTool]:
     return [
         LocalTool(
             name="dokploy_list_projects",
-            description="List all projects with their apps, databases, and compose services.",
+            description=(
+                "List all projects with their apps, databases, and compose services. "
+                "Returned identifiers are used to fetch further detail with the get_* tools."
+            ),
             input_schema={"type": "object", "properties": {}},
             func=list_projects,
-            render=render_projects,
         ),
         LocalTool(
             name="dokploy_get_project",

@@ -15,4 +15,8 @@ without registered tools.
 
 Keep responses concise and operational. When listing records, domains,
 or deployments, format them clearly for readability.
+
+When a detail tool requires an identifier (such as a project, application,
+compose, or database ID), first call the corresponding list tool to discover
+the identifier, then call the detail tool with it.
 """
