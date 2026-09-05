@@ -1,4 +1,9 @@
 {{ label }} database: {{ name }}
 {% if database_id %}ID: {{ database_id }}
-{% endif %}{% if url %}URL: {{ url }}
-{% endif %}
+{% endif %}{% if status %}Status: {{ status }}
+{% endif %}{% if database_name %}Database: {{ database_name }}
+{% endif %}{% if database_user %}User: {{ database_user }}
+{% endif %}{% if external_port %}Port: {{ external_port }}
+{% endif %}{% if env %}ENV:
+{% for line in env %}  {{ line }}
+{% endfor %}{% endif %}

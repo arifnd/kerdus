@@ -5,4 +5,6 @@ Application: {{ name }}
 {% endif %}{% if domains %}Domains:
 {% for domain in domains %}
 • {{ domain }}
+{% endfor %}{% endif %}{% if env %}ENV:
+{% for line in env %}  {{ line }}
 {% endfor %}{% endif %}

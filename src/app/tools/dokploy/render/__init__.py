@@ -19,38 +19,6 @@ def _render(template: str, **context: Any) -> str:
     return _ENV.get_template(template).render(**context).strip()
 
 
-def _id_name(value: Any, id_key: str = "id", name_key: str = "name") -> tuple[str, str] | None:
-    if isinstance(value, str):
-        return (value, value)
-    if not isinstance(value, dict):
-        return None
-    item_id = str(value.get(id_key) or "")
-    name = str(value.get(name_key) or "")
-    if name and item_id:
-        return (item_id, name)
-    if name:
-        return ("", name)
-    if item_id:
-        return (item_id, "")
-    return None
-
-
-def _format_items(items: list[Any], id_key: str = "id", name_key: str = "name") -> list[str]:
-    lines: list[str] = []
-    for item in items:
-        pair = _id_name(item, id_key, name_key)
-        if pair is None:
-            continue
-        item_id, name = pair
-        if name and item_id:
-            lines.append(f"{name} ({item_id})")
-        elif name:
-            lines.append(name)
-        elif item_id:
-            lines.append(item_id)
-    return lines
-
-
 def _parse_env(env: Any) -> list[str]:
     if isinstance(env, dict):
         return [f"{k}={v}" for k, v in env.items()]
@@ -59,122 +27,170 @@ def _parse_env(env: Any) -> list[str]:
     return []
 
 
-def _service_rows(items: list[Any], id_key: str, name_key: str) -> list[dict[str, Any]]:
-    show_env = get_settings().dokploy_show_secret
-    rows: list[dict[str, Any]] = []
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        pair = _id_name(item, id_key, name_key)
-        if pair is None:
-            continue
-        item_id, name = pair
-        label = f"{name} ({item_id})" if name and item_id else name or item_id
-        rows.append(
-            {
-                "label": label,
-                "env": _parse_env(item.get("env")) if show_env else [],
-            }
-        )
-    return rows
+def _service_env(service: dict[str, Any]) -> list[str]:
+    if not get_settings().dokploy_show_secret:
+        return []
+    return _parse_env(service.get("env"))
+
+
+def _domain_hosts(domains: Any) -> list[str]:
+    if not isinstance(domains, list):
+        return []
+    hosts: list[str] = []
+    for item in domains:
+        if isinstance(item, str):
+            hosts.append(item)
+        elif isinstance(item, dict) and item.get("host"):
+            hosts.append(str(item["host"]))
+    return hosts
+
+
+def _str(value: Any) -> str:
+    if value is None:
+        return ""
+    return str(value)
 
 
 def render_projects(result: dict[str, Any]) -> str:
     projects = result if isinstance(result, list) else result.get("projects", [])
-    rows = _format_items(projects)
-    return _render("projects.html", projects=rows)
+    lines: list[str] = []
+    for project in projects if isinstance(projects, list) else []:
+        if not isinstance(project, dict):
+            continue
+        project_id = _str(project.get("projectId") or project.get("id"))
+        name = _str(project.get("name"))
+        if name and project_id:
+            lines.append(f"{name} ({project_id})")
+        elif name:
+            lines.append(name)
+        elif project_id:
+            lines.append(project_id)
+    return _render("projects.html", projects=lines)
+
+
+def _service_summary(items: Any, id_key: str, status_key: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        item_id = _str(item.get(id_key))
+        name = _str(item.get("name") or item.get("appName"))
+        label = f"{name} ({item_id})" if name and item_id else name or item_id
+        if not label:
+            continue
+        rows.append({"label": label, "status": _str(item.get(status_key))})
+    return rows
+
+
+def _database_summary(items: Any, id_key: str) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for item in items if isinstance(items, list) else []:
+        if not isinstance(item, dict):
+            continue
+        item_id = _str(item.get(id_key))
+        name = _str(item.get("name") or item.get("appName"))
+        label = f"{name} ({item_id})" if name and item_id else name or item_id
+        if not label:
+            continue
+        rows.append({"label": label, "status": _str(item.get("applicationStatus"))})
+    return rows
 
 
 def render_project(result: dict[str, Any]) -> str:
     project = result if isinstance(result, dict) else {}
-    name = str(project.get("name") or "")
-    project_id = str(project.get("id") or "")
-    apps = _service_rows(project.get("applications", []), "appId", "appName")
-    composes = _service_rows(project.get("composes", []), "composeId", "composeName")
-    databases = (
-        _service_rows(project.get("postgres", []), "databaseId", "name")
-        + _service_rows(project.get("mysql", []), "databaseId", "name")
-        + _service_rows(project.get("mariadb", []), "databaseId", "name")
-        + _service_rows(project.get("mongo", []), "databaseId", "name")
-        + _service_rows(project.get("redis", []), "databaseId", "name")
-    )
+    name = _str(project.get("name"))
+    project_id = _str(project.get("projectId") or project.get("id"))
+    environments: list[dict[str, Any]] = []
+    for env in (
+        project.get("environments", []) if isinstance(project.get("environments"), list) else []
+    ):
+        if not isinstance(env, dict):
+            continue
+        environments.append(
+            {
+                "name": _str(env.get("name")) or _str(env.get("environmentId")) or "default",
+                "applications": _service_summary(
+                    env.get("applications"), "applicationId", "applicationStatus"
+                ),
+                "compose": _service_summary(env.get("compose"), "composeId", "composeStatus"),
+                "databases": (
+                    _database_summary(env.get("postgres"), "postgresId")
+                    + _database_summary(env.get("mysql"), "mysqlId")
+                    + _database_summary(env.get("mariadb"), "mariadbId")
+                    + _database_summary(env.get("mongo"), "mongoId")
+                    + _database_summary(env.get("redis"), "redisId")
+                    + _database_summary(env.get("libsql"), "libsqlId")
+                ),
+            }
+        )
     return _render(
         "project.html",
         name=name,
         project_id=project_id,
-        apps=apps,
-        composes=composes,
-        databases=databases,
+        environments=environments,
     )
+
+
+def _render_service(template: str, **context: Any) -> str:
+    return _render(template, **context)
 
 
 def render_application(result: dict[str, Any]) -> str:
     app = result if isinstance(result, dict) else {}
-    name = str(app.get("appName") or app.get("name") or app.get("projectName") or "")
-    app_id = str(app.get("appId") or app.get("id") or "")
-    status = str(app.get("appStatus") or "")
-    domains = [
-        str(d) for d in app.get("domains", []) if isinstance(d, str)
-    ]
-    description = app.get("description")
-    if not isinstance(description, str):
-        description = ""
-    return _render(
+    return _render_service(
         "application.html",
-        name=name,
-        application_id=app_id,
-        status=status,
-        domains=domains,
-        description=description,
+        name=_str(app.get("name") or app.get("appName")),
+        application_id=_str(app.get("applicationId") or app.get("id")),
+        status=_str(app.get("applicationStatus")),
+        domains=_domain_hosts(app.get("domains")),
+        description=_str(app.get("description")),
+        env=_service_env(app),
     )
 
 
 def render_compose(result: dict[str, Any]) -> str:
     compose = result if isinstance(result, dict) else {}
-    name = str(compose.get("composeName") or compose.get("name") or compose.get("projectName") or "")
-    compose_id = str(compose.get("composeId") or compose.get("id") or "")
-    status = str(compose.get("composeStatus") or "")
-    domains = [
-        str(d) for d in compose.get("domains", []) if isinstance(d, str)
-    ]
-    description = compose.get("description")
-    if not isinstance(description, str):
-        description = ""
-    return _render(
+    return _render_service(
         "compose.html",
-        name=name,
-        compose_id=compose_id,
-        status=status,
-        domains=domains,
-        description=description,
+        name=_str(compose.get("name") or compose.get("appName")),
+        compose_id=_str(compose.get("composeId") or compose.get("id")),
+        status=_str(compose.get("composeStatus")),
+        domains=_domain_hosts(compose.get("domains")),
+        description=_str(compose.get("description")),
+        env=_service_env(compose),
     )
 
 
-def _render_database(result: dict[str, Any], label: str, template: str) -> str:
+def _render_database(result: dict[str, Any], label: str, id_key: str) -> str:
     db = result if isinstance(result, dict) else {}
-    name = str(db.get("name") or db.get("projectName") or "")
-    db_id = str(db.get("databaseId") or db.get("id") or "")
-    url = db.get("publicURL") or db.get("internalURL")
-    if not isinstance(url, str):
-        url = ""
-    return _render(template, label=label, name=name, database_id=db_id, url=url)
+    return _render_service(
+        "database.html",
+        label=label,
+        name=_str(db.get("name") or db.get("appName")),
+        database_id=_str(db.get(id_key) or db.get("id")),
+        status=_str(db.get("applicationStatus")),
+        database_name=_str(db.get("databaseName")),
+        database_user=_str(db.get("databaseUser")),
+        external_port=_str(db.get("externalPort")),
+        env=_service_env(db),
+    )
 
 
 def render_postgres(result: dict[str, Any]) -> str:
-    return _render_database(result, "PostgreSQL", "database.html")
+    return _render_database(result, "PostgreSQL", "postgresId")
 
 
 def render_mysql(result: dict[str, Any]) -> str:
-    return _render_database(result, "MySQL", "database.html")
+    return _render_database(result, "MySQL", "mysqlId")
 
 
 def render_mongo(result: dict[str, Any]) -> str:
-    return _render_database(result, "MongoDB", "database.html")
+    return _render_database(result, "MongoDB", "mongoId")
 
 
 def render_mariadb(result: dict[str, Any]) -> str:
-    return _render_database(result, "MariaDB", "database.html")
+    return _render_database(result, "MariaDB", "mariadbId")
 
 
 def render_redis(result: dict[str, Any]) -> str:
-    return _render_database(result, "Redis", "database.html")
+    return _render_database(result, "Redis", "redisId")
