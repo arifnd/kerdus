@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.tools.dokploy.api import _strip_secrets
+from app.tools.dokploy.render import render_projects
 
 
 def _get_tool(tools, name):
@@ -73,3 +74,22 @@ class TestDokploySecretStripping:
         payload = {"config": {"database": {"password": "hunter2", "user": "u"}}}
         stripped = _strip_secrets(payload)
         assert stripped == {"config": {"database": {"user": "u"}}}
+
+
+class TestDokployRender:
+    def test_render_projects(self) -> None:
+        projects = [
+            {"id": "proj-1", "name": "blog"},
+            {"id": "proj-2", "name": "stats"},
+        ]
+        assert render_projects(projects) == (
+            "<code>blog</code> (proj-1)\n<code>stats</code> (proj-2)"
+        )
+
+    def test_render_projects_missing_name_or_id(self) -> None:
+        assert render_projects([{"name": "no-id"}, {"id": "no-name"}]) == (
+            "<code>no-id</code>\n<code>no-name</code>"
+        )
+
+    def test_render_projects_empty(self) -> None:
+        assert render_projects([]) == "No projects found."

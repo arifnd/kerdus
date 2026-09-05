@@ -6,6 +6,7 @@ import httpx
 
 from ...logging import get_logger
 from ...settings import get_settings
+from .render import render_domains, render_records
 
 log = get_logger("tools.desec")
 
@@ -44,14 +45,14 @@ async def _request(method: str, path: str, body: dict[str, Any] | None = None) -
         return resp.json()
 
 
-async def list_domains() -> dict[str, Any]:
+async def list_domains() -> str:
     data = await _request("GET", "domains/")
-    return {"domains": data}
+    return render_domains(data)
 
 
-async def retrieve_records(domain: str) -> dict[str, Any]:
+async def retrieve_records(domain: str) -> str:
     data = await _request("GET", f"domains/{domain}/rrsets/")
-    return {"rrsets": data}
+    return render_records(data)
 
 
 async def create_record(

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from app.tools.porkbun.render import render_domains, render_records
+
 
 def _get_tool(tools, name):
     return next(t for t in tools if t.name == name)
@@ -50,3 +52,40 @@ class TestPorkbunToolSchemas:
         required = tool.input_schema["required"]
         assert "domain" in required
         assert "type" in required
+
+
+class TestPorkbunRender:
+    def test_render_domains(self) -> None:
+        domains = [
+            {"domain": "example.com", "status": "ACTIVE"},
+            {"domain": "example.org", "status": "ACTIVE"},
+        ]
+        assert render_domains(domains) == (
+            "<code>example.com</code>\n<code>example.org</code>"
+        )
+
+    def test_render_domains_skips_missing_name(self) -> None:
+        assert render_domains([{"status": "ACTIVE"}]) == "No domains found."
+
+    def test_render_domains_empty(self) -> None:
+        assert render_domains([]) == "No domains found."
+
+    def test_render_records(self) -> None:
+        records = [
+            {"type": "A", "name": "www", "content": "1.2.3.4", "ttl": "600"},
+            {"type": "A", "name": "www", "content": "1.2.3.4", "ttl": "600"},
+            {"type": "TXT", "name": "@", "content": "v=spf1"},
+        ]
+        assert render_records(records) == (
+            '<code>A www</code> -> 1.2.3.4 (ttl=600)\n'
+            '<code>TXT @</code> -> v=spf1'
+        )
+
+    def test_render_records_includes_id(self) -> None:
+        records = [{"type": "CNAME", "name": "api", "content": "foo.example.com", "id": "1234"}]
+        assert render_records(records) == (
+            '<code>CNAME api</code> -> foo.example.com (id=1234)'
+        )
+
+    def test_render_records_empty(self) -> None:
+        assert render_records([]) == "No DNS records found."

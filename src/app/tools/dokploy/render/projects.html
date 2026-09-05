@@ -1,0 +1,3 @@
+{% for project in projects %}{% if project.name %}<code>{{ project.name }}</code>{% if project.id %} ({{ project.id }}){% endif %}{% else %}<code>{{ project.id }}</code>{% endif %}
+{% else %}No projects found.
+{% endfor %}
