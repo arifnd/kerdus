@@ -4,7 +4,7 @@ import pytest
 
 from app.tools import build_local_tools
 from app.tools.desec import DeSecAPIError
-from app.tools.dokploy import DokployAPIError
+from app.tools.dokploy import DokployAPIError, _strip_secrets
 from app.tools.porkbun import PorkbunAPIError
 
 
@@ -191,3 +191,33 @@ class TestAPIErrors:
         assert exc.status == 403
         assert exc.message == "forbidden"
         assert "403" in str(exc)
+
+
+class TestDokploySecretStripping:
+    def test_strips_env_and_secret_keys(self) -> None:
+        payload = {
+            "id": "app-123",
+            "name": "myservice",
+            "env": "FOO=bar\nAPI_KEY=secret",
+            "buildSecrets": "TOKEN=abc",
+            "appName": "foo",
+            "password": "p455",
+            "normal": {"port": 8080, "replicas": 2},
+        }
+        stripped = _strip_secrets(payload)
+        assert stripped == {
+            "id": "app-123",
+            "name": "myservice",
+            "appName": "foo",
+            "normal": {"port": 8080, "replicas": 2},
+        }
+
+    def test_strips_recursively_in_lists(self) -> None:
+        payload = {"apps": [{"name": "a", "env": "X=1"}]}
+        stripped = _strip_secrets(payload)
+        assert stripped == {"apps": [{"name": "a"}]}
+
+    def test_strips_nested_secret_key(self) -> None:
+        payload = {"config": {"database": {"password": "hunter2", "user": "u"}}}
+        stripped = _strip_secrets(payload)
+        assert stripped == {"config": {"database": {"user": "u"}}}

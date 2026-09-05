@@ -61,20 +61,52 @@ async def _post(path: str, body: dict[str, Any] | None = None) -> Any:
         return resp.json()
 
 
+_SECRET_MARKERS = ("apikey", "password", "token", "secret", "_key")
+_ENV_KEYS = frozenset(
+    {
+        "env",
+        "buildargs",
+        "buildsecrets",
+        "previewenv",
+        "previewbuildargs",
+        "previewbuildsecrets",
+    }
+)
+
+
+def _is_secret_key(key: str) -> bool:
+    lowered = key.lower()
+    return lowered in _ENV_KEYS or any(marker in lowered for marker in _SECRET_MARKERS)
+
+
+def _strip_secrets(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _strip_secrets(v) for k, v in value.items() if not _is_secret_key(k)}
+    if isinstance(value, list):
+        return [_strip_secrets(item) for item in value]
+    return value
+
+
+def _sanitized(data: Any) -> Any:
+    if get_settings().dokploy_show_secret:
+        return data
+    return _strip_secrets(data)
+
+
 async def list_projects() -> list[dict[str, Any]]:
-    return await _get("project.all")
+    return _sanitized(await _get("project.all"))
 
 
 async def get_project(project_id: str) -> dict[str, Any]:
-    return await _get("project.one", params={"projectId": project_id})
+    return _sanitized(await _get("project.one", params={"projectId": project_id}))
 
 
 async def get_application(application_id: str) -> dict[str, Any]:
-    return await _get("application.one", params={"applicationId": application_id})
+    return _sanitized(await _get("application.one", params={"applicationId": application_id}))
 
 
 async def get_compose(compose_id: str) -> dict[str, Any]:
-    return await _get("compose.one", params={"composeId": compose_id})
+    return _sanitized(await _get("compose.one", params={"composeId": compose_id}))
 
 
 async def get_postgres(postgres_id: str) -> dict[str, Any]:

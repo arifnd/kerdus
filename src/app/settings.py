@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     dokploy_enabled: bool = True
     dokploy_url: str = ""
     dokploy_api_key: str = ""
+    dokploy_show_secret: bool = False
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(
