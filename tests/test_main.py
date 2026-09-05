@@ -37,6 +37,25 @@ def test_health_and_ready(config_path) -> None:
         assert body["status"] in {"ready", "not_ready"}
         assert isinstance(body["telegram"], bool)
         assert body["llm"] in {"reachable", "unreachable", "not_configured"}
+        assert body["processing_hint"] is False
+
+
+def test_ready_reports_processing_hint_enabled(config_path, monkeypatch) -> None:
+    from app.config import load_config
+    from app.settings import get_settings
+
+    get_settings.cache_clear()
+    try:
+        monkeypatch.setenv("AGENT_PROCESSING", "true")
+        cfg = load_config(config_path)
+        app = create_app(config_path=config_path)
+        with TestClient(app) as client:
+            ready = client.get("/ready").json()
+            assert ready["processing_hint"] is True
+            assert cfg.agent.processing_hint is True
+    finally:
+        monkeypatch.delenv("AGENT_PROCESSING", raising=False)
+        get_settings.cache_clear()
 
 
 def test_config_reload_endpoint(config_path) -> None:

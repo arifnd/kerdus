@@ -24,6 +24,40 @@ def test_env_allowed_user_id_overrides_config(monkeypatch) -> None:
         get_settings.cache_clear()
 
 
+def test_env_processing_true_overrides_config(monkeypatch) -> None:
+    get_settings.cache_clear()
+    try:
+        monkeypatch.setenv("AGENT_PROCESSING", "true")
+        cfg = load_config("config.json")
+        assert cfg.agent.processing_hint is True
+        assert cfg.agent.max_iterations == 5
+    finally:
+        monkeypatch.delenv("AGENT_PROCESSING", raising=False)
+        get_settings.cache_clear()
+
+
+def test_env_processing_false_overrides_config(monkeypatch) -> None:
+    get_settings.cache_clear()
+    try:
+        monkeypatch.setenv("AGENT_PROCESSING", "false")
+        cfg = load_config("config.json")
+        assert cfg.agent.processing_hint is False
+    finally:
+        monkeypatch.delenv("AGENT_PROCESSING", raising=False)
+        get_settings.cache_clear()
+
+
+def test_env_processing_empty_does_not_override(monkeypatch) -> None:
+    get_settings.cache_clear()
+    try:
+        monkeypatch.setenv("AGENT_PROCESSING", "")
+        cfg = load_config("config.json")
+        assert cfg.agent.processing_hint is False
+    finally:
+        monkeypatch.delenv("AGENT_PROCESSING", raising=False)
+        get_settings.cache_clear()
+
+
 def test_redact() -> None:
     assert redact("") == ""
     assert redact("short") == "***"

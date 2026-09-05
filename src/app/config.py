@@ -36,6 +36,9 @@ def load_config(path: str | Path = "config.json") -> AppConfig:
     env_allowed_user_id = get_settings().telegram_allowed_user_id
     if env_allowed_user_id:
         cfg.telegram.allowed_user_id = env_allowed_user_id
+    env_processing = get_settings().agent_processing
+    if env_processing is not None:
+        cfg.agent.processing_hint = env_processing
     return cfg
 
 

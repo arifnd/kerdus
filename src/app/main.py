@@ -93,10 +93,14 @@ def create_app(
 
     @app.get("/ready")
     async def ready() -> dict:
+        processing_hint = False
+        if ctx.config_manager:
+            processing_hint = ctx.config_manager.config.agent.processing_hint
         return {
             "status": "ready" if ctx.ready else "not_ready",
             "telegram": ctx.telegram is not None and ctx.ready,
             "llm": await _llm_status(ctx),
+            "processing_hint": processing_hint,
         }
 
     @app.post("/config/reload")

@@ -66,7 +66,7 @@ There are two layers:
 | field                    | default | range         | notes                              |
 |--------------------------|---------|---------------|------------------------------------|
 | `max_iterations`         | 5       | 1–20          | applied on hot reload              |
-| `processing_hint`        | false   | —             | show `…` while thinking            |
+| `processing_hint`        | false   | —             | show `…` while thinking (`AGENT_PROCESSING=true/false` overrides) |
 | `max_tool_result_chars`  | 4000    | 1–100000      | truncate large tool output         |
 | `max_llm_retries`        | 2       | 0–10          | LLM call retries                   |
 | `llm_retry_base_seconds` | 1.0     | 0.1–60        | retry backoff base                 |
@@ -100,6 +100,11 @@ DOKPLOY_URL=
 DOKPLOY_API_KEY=
 # Show environment variables / secrets in Dokploy tool results (default: hidden)
 DOKPLOY_SHOW_SECRET=false
+
+# Agent
+# Override config.json agent.processing_hint (show "..." while thinking): true or false.
+# Leave empty to use config.json.
+AGENT_PROCESSING=
 
 # General
 TZ=UTC

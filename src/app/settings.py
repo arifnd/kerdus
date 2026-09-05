@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     dokploy_url: str = ""
     dokploy_api_key: str = ""
     dokploy_show_secret: bool = False
+    agent_processing: bool | None = None
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(
@@ -38,6 +39,20 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return value.strip().lower() in {"1", "true", "yes", "on"}
         return False
+
+    @field_validator("agent_processing", mode="before")
+    @classmethod
+    def _coerce_processing(cls, value: Any) -> bool | None:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if not normalized:
+                return None
+            return normalized in {"1", "true", "yes", "on"}
+        return None
 
 
 @lru_cache
