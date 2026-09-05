@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.tools.dokploy import _strip_secrets
+from app.tools.dokploy.api import _strip_secrets
 
 
 def _get_tool(tools, name):

@@ -4,8 +4,8 @@ from typing import Any
 
 import httpx
 
-from ..logging import get_logger
-from ..settings import get_settings
+from ...logging import get_logger
+from ...settings import get_settings
 
 log = get_logger("tools.dokploy")
 
