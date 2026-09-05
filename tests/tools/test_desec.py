@@ -69,7 +69,12 @@ class TestDeSecRender:
             "domain": "example.id",
             "rrsets": [
                 {"type": "A", "subname": "sub", "records": ["43.157.229.229"], "ttl": 3600},
-                {"type": "NS", "subname": "", "records": ["ns2.example.id.", "ns1.example.id."], "ttl": 3600},
+                {
+                    "type": "NS",
+                    "subname": "",
+                    "records": ["ns2.example.id.", "ns1.example.id."],
+                    "ttl": 3600,
+                },
             ],
         }
         assert render_records(result) == (
@@ -85,7 +90,11 @@ class TestDeSecRender:
         result = {
             "domain": "example.com",
             "rrsets": [
-                {"type": "TXT", "subname": "", "records": ["v=spf1 include:_spf.example.com", "google-site-verification=abc"]},
+                {
+                    "type": "TXT",
+                    "subname": "",
+                    "records": ["v=spf1 include:_spf.example.com", "google-site-verification=abc"],
+                },
             ],
         }
         assert render_records(result) == (
