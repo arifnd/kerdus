@@ -1,7 +1,8 @@
 {{ "Created" if created else "Found existing" }} Telegram notification in Dokploy.
 Name: {{ name }}
-ID: {{ notification_id }}
-Chat: {{ chat_id }}
-{% if events %}Events enabled:
+{% if notification_id %}ID: {{ notification_id }}
+{% endif %}{% if chat_id %}Chat: {{ chat_id }}
+{% endif %}{% if events %}Events enabled:
 {% for event in events %}• {{ event }}
-{% endfor %}{% endif %}
+{% endfor %}{% endif %}{% if not listed %}Could not load the notification details from Dokploy. The notification may still have been created - run "Add dokploy telegram notification" again to confirm.
+{% endif %}

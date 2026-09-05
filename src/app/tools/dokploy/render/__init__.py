@@ -222,7 +222,13 @@ def _notification_context(notification: dict[str, Any]) -> dict[str, Any]:
 def render_notification_add(result: dict[str, Any]) -> str:
     notification = result.get("notification", {}) if isinstance(result, dict) else {}
     created = bool(result.get("created")) if isinstance(result, dict) else False
-    return _render("notification_add.html", created=created, **_notification_context(notification))
+    listed = result.get("listed", True) if isinstance(result, dict) else True
+    return _render(
+        "notification_add.html",
+        created=created,
+        listed=listed,
+        **_notification_context(notification),
+    )
 
 
 def render_notification_delete(result: dict[str, Any]) -> str:

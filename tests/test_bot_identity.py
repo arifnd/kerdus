@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import types
 from typing import Self
 
+import httpx
 import pytest
 
 from app.settings import get_settings
@@ -48,6 +50,39 @@ def _fake_httpx(monkeypatch) -> None:
     monkeypatch.setattr(bot_identity, "httpx", types.SimpleNamespace(AsyncClient=_FakeClient))
 
 
+class _FlakyClient:
+    def __init__(self, *_args, **_kwargs) -> None:
+        self.calls = 0
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, *args) -> bool:
+        return False
+
+    async def get(self, _url: str) -> _FakeResponse:
+        self.calls += 1
+        if self.calls == 1:
+            raise httpx.ConnectError("boom")
+        return _FakeResponse(
+            {"ok": True, "result": {"id": 1, "first_name": "Kerdus Bot", "username": "kerdusbot"}}
+        )
+
+
+class _AlwaysDownClient(_FlakyClient):
+    async def get(self, _url: str) -> _FakeResponse:
+        self.calls += 1
+        raise httpx.ConnectError("boom")
+
+
+@pytest.fixture
+def _no_sleep(monkeypatch):
+    async def _no_sleep(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+
+
 async def test_get_bot_name_uses_first_name(monkeypatch) -> None:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:SUPER_SECRET")
     get_settings.cache_clear()
@@ -58,3 +93,26 @@ async def test_get_bot_name_uses_first_name(monkeypatch) -> None:
 async def test_get_bot_name_requires_token(monkeypatch) -> None:
     with pytest.raises(ValueError):
         await get_bot_name()
+
+
+async def test_get_bot_name_retries_then_succeeds(monkeypatch, _no_sleep) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:SUPER_SECRET")
+    get_settings.cache_clear()
+    client = _FlakyClient()
+    monkeypatch.setattr(
+        bot_identity, "httpx", types.SimpleNamespace(AsyncClient=lambda *a, **k: client)
+    )
+    assert await get_bot_name() == "Kerdus Bot"
+    assert client.calls == 2
+
+
+async def test_get_bot_name_raises_after_retries_exhausted(monkeypatch, _no_sleep) -> None:
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "123456:SUPER_SECRET")
+    get_settings.cache_clear()
+    client = _AlwaysDownClient()
+    monkeypatch.setattr(
+        bot_identity, "httpx", types.SimpleNamespace(AsyncClient=lambda *a, **k: client)
+    )
+    with pytest.raises(ValueError, match="could not fetch the Telegram bot name"):
+        await get_bot_name()
+    assert client.calls == 3

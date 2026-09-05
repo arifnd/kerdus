@@ -278,6 +278,29 @@ def test_render_notification_add_already_exists() -> None:
     assert "SUPER_SECRET" not in rendered
 
 
+def test_render_notification_add_unlisted() -> None:
+    rendered = render_notification_add(
+        {
+            "notification": {
+                "name": "Kerdus Bot",
+                "notificationId": "",
+                "notificationType": "telegram",
+            },
+            "created": True,
+            "listed": False,
+        }
+    )
+    assert rendered == (
+        "Created Telegram notification in Dokploy.\n"
+        "Name: Kerdus Bot\n"
+        "Could not load the notification details from Dokploy. The notification may "
+        'still have been created - run "Add dokploy telegram notification" again to '
+        "confirm."
+    )
+    assert "ID:" not in rendered
+    assert "Chat:" not in rendered
+
+
 def test_render_notification_delete() -> None:
     assert render_notification_delete({"notificationId": "ntf-1", "name": "Kerdus Bot"}) == (
         "Deleted Telegram notification: Kerdus Bot\nID: ntf-1"
@@ -346,16 +369,188 @@ async def test_add_telegram_notification_creates_when_missing(monkeypatch) -> No
 async def test_add_telegram_notification_returns_existing(monkeypatch) -> None:
     _env_telegram(monkeypatch)
 
+    async def _bot_name() -> str:
+        return "Kerdus Bot"
+
     async def _create(payload: dict) -> None:  # pragma: no cover - must not be called
         raise AssertionError("should reuse the existing notification")
 
     async def _list_notifications() -> list[dict]:
         return [NOTIFICATION]
 
+    monkeypatch.setattr(dokploy_tools, "get_bot_name", _bot_name)
     monkeypatch.setattr(dokploy_tools, "list_notifications", _list_notifications)
     monkeypatch.setattr(dokploy_tools, "create_telegram_notification", _create)
     result = await dokploy_tools.add_telegram_notification()
     assert result == {"notification": NOTIFICATION, "created": False}
+
+
+async def test_add_telegram_notification_creates_when_listing_fails(monkeypatch) -> None:
+    _env_telegram(monkeypatch)
+    created_payloads: list[dict] = []
+
+    async def _bot_name() -> str:
+        return "Kerdus Bot"
+
+    async def _list_notifications() -> list[dict]:
+        raise dokploy_tools.DokployAPIError(status=403, message="Forbidden")
+
+    async def _create(payload: dict) -> None:
+        created_payloads.append(payload)
+
+    monkeypatch.setattr(dokploy_tools, "get_bot_name", _bot_name)
+    monkeypatch.setattr(dokploy_tools, "list_notifications", _list_notifications)
+    monkeypatch.setattr(dokploy_tools, "create_telegram_notification", _create)
+    result = await dokploy_tools.add_telegram_notification()
+    assert result == {
+        "notification": {
+            "name": "Kerdus Bot",
+            "notificationId": "",
+            "notificationType": "telegram",
+        },
+        "created": True,
+        "listed": False,
+    }
+    assert len(created_payloads) == 1
+
+
+async def test_add_telegram_notification_unlisted_after_create(monkeypatch) -> None:
+    _env_telegram(monkeypatch)
+
+    async def _bot_name() -> str:
+        return "Kerdus Bot"
+
+    async def _list_notifications() -> list[dict]:
+        return []
+
+    created_payloads: list[dict] = []
+
+    async def _create(payload: dict) -> None:
+        created_payloads.append(payload)
+
+    monkeypatch.setattr(dokploy_tools, "get_bot_name", _bot_name)
+    monkeypatch.setattr(dokploy_tools, "list_notifications", _list_notifications)
+    monkeypatch.setattr(dokploy_tools, "create_telegram_notification", _create)
+    result = await dokploy_tools.add_telegram_notification()
+    assert result["created"] is True
+    assert result["listed"] is False
+    assert result["notification"]["notificationId"] == ""
+
+
+async def test_add_telegram_notification_dedupes_by_name_when_relation_missing(
+    monkeypatch,
+) -> None:
+    _env_telegram(monkeypatch)
+    flat = {
+        "notificationId": "ntf-9",
+        "name": "Kerdus Bot",
+        "notificationType": "telegram",
+    }
+
+    async def _bot_name() -> str:
+        return "Kerdus Bot"
+
+    async def _list_notifications() -> list[dict]:
+        return [flat]
+
+    async def _create(payload: dict) -> None:  # pragma: no cover - must not be called
+        raise AssertionError("should reuse the existing notification")
+
+    monkeypatch.setattr(dokploy_tools, "get_bot_name", _bot_name)
+    monkeypatch.setattr(dokploy_tools, "list_notifications", _list_notifications)
+    monkeypatch.setattr(dokploy_tools, "create_telegram_notification", _create)
+    result = await dokploy_tools.add_telegram_notification()
+    assert result == {"notification": flat, "created": False}
+
+
+async def test_add_telegram_notification_skips_bot_name_when_exists(monkeypatch) -> None:
+    _env_telegram(monkeypatch)
+
+    async def _bot_name() -> str:
+        raise ValueError("Telegram getMe unreachable")
+
+    async def _list_notifications() -> list[dict]:
+        return [NOTIFICATION]
+
+    async def _create(payload: dict) -> None:  # pragma: no cover - must not be called
+        raise AssertionError("should reuse the existing notification")
+
+    monkeypatch.setattr(dokploy_tools, "get_bot_name", _bot_name)
+    monkeypatch.setattr(dokploy_tools, "list_notifications", _list_notifications)
+    monkeypatch.setattr(dokploy_tools, "create_telegram_notification", _create)
+    result = await dokploy_tools.add_telegram_notification()
+    assert result == {"notification": NOTIFICATION, "created": False}
+
+
+async def test_add_telegram_notification_succeeds_when_create_raises_after_commit(
+    monkeypatch,
+) -> None:
+    _env_telegram(monkeypatch)
+    calls = {"n": 0}
+
+    async def _bot_name() -> str:
+        return "Kerdus Bot"
+
+    async def _list_notifications() -> list[dict]:
+        calls["n"] += 1
+        return [NOTIFICATION] if calls["n"] > 2 else []
+
+    async def _create(payload: dict) -> None:
+        raise RuntimeError("read timeout")
+
+    monkeypatch.setattr(dokploy_tools, "get_bot_name", _bot_name)
+    monkeypatch.setattr(dokploy_tools, "list_notifications", _list_notifications)
+    monkeypatch.setattr(dokploy_tools, "create_telegram_notification", _create)
+    result = await dokploy_tools.add_telegram_notification()
+    assert result == {"notification": NOTIFICATION, "created": True}
+
+
+async def test_add_telegram_notification_succeeds_when_create_uncertain_and_unlisted(
+    monkeypatch,
+) -> None:
+    _env_telegram(monkeypatch)
+
+    async def _bot_name() -> str:
+        return "Kerdus Bot"
+
+    async def _list_notifications() -> list[dict]:
+        return []
+
+    async def _create(payload: dict) -> None:
+        raise RuntimeError("connection lost")
+
+    monkeypatch.setattr(dokploy_tools, "get_bot_name", _bot_name)
+    monkeypatch.setattr(dokploy_tools, "list_notifications", _list_notifications)
+    monkeypatch.setattr(dokploy_tools, "create_telegram_notification", _create)
+    result = await dokploy_tools.add_telegram_notification()
+    assert result == {
+        "notification": {
+            "name": "Kerdus Bot",
+            "notificationId": "",
+            "notificationType": "telegram",
+        },
+        "created": True,
+        "listed": False,
+    }
+
+
+async def test_add_telegram_notification_raises_on_api_error(monkeypatch) -> None:
+    _env_telegram(monkeypatch)
+
+    async def _bot_name() -> str:
+        return "Kerdus Bot"
+
+    async def _list_notifications() -> list[dict]:
+        return []
+
+    async def _create(payload: dict) -> None:
+        raise dokploy_tools.DokployAPIError(status=400, message="Error creating the notification")
+
+    monkeypatch.setattr(dokploy_tools, "get_bot_name", _bot_name)
+    monkeypatch.setattr(dokploy_tools, "list_notifications", _list_notifications)
+    monkeypatch.setattr(dokploy_tools, "create_telegram_notification", _create)
+    with pytest.raises(dokploy_tools.DokployAPIError):
+        await dokploy_tools.add_telegram_notification()
 
 
 async def test_add_telegram_notification_requires_credentials(monkeypatch) -> None:
@@ -379,9 +574,13 @@ async def test_delete_telegram_notification_by_id(monkeypatch) -> None:
 async def test_delete_telegram_notification_by_env_match(monkeypatch) -> None:
     _env_telegram(monkeypatch)
 
+    async def _bot_name() -> str:
+        return "Kerdus Bot"
+
     async def _list_notifications() -> list[dict]:
         return [NOTIFICATION]
 
+    monkeypatch.setattr(dokploy_tools, "get_bot_name", _bot_name)
     monkeypatch.setattr(dokploy_tools, "list_notifications", _list_notifications)
     removed: list[str] = []
 
@@ -398,9 +597,13 @@ async def test_delete_telegram_notification_by_env_match(monkeypatch) -> None:
 async def test_delete_telegram_notification_no_match_raises(monkeypatch) -> None:
     _env_telegram(monkeypatch)
 
+    async def _bot_name() -> str:
+        return "Kerdus Bot"
+
     async def _list_notifications() -> list[dict]:
         return []
 
+    monkeypatch.setattr(dokploy_tools, "get_bot_name", _bot_name)
     monkeypatch.setattr(dokploy_tools, "list_notifications", _list_notifications)
     with pytest.raises(dokploy_tools.DokployAPIError) as exc_info:
         await dokploy_tools.delete_telegram_notification()

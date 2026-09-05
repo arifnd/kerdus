@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from ...logging import get_logger
 from ...settings import get_settings
 from ...telegram.bot_identity import get_bot_name
 from ..base import LocalTool
@@ -34,6 +35,8 @@ from .render import (
     render_project,
     render_redis,
 )
+
+log = get_logger("dokploy.tools")
 
 __all__ = [
     "DokployAPIError",
@@ -86,7 +89,7 @@ def _notification_payload(bot_token: str, chat_id: str, name: str) -> dict[str, 
 
 
 async def _find_existing_telegram_notification(
-    bot_token: str, chat_id: str
+    bot_token: str, chat_id: str, name: str = ""
 ) -> dict[str, Any] | None:
     for item in await list_notifications():
         if not isinstance(item, dict):
@@ -98,25 +101,65 @@ async def _find_existing_telegram_notification(
             and telegram.get("chatId") == chat_id
         ):
             return item
+        if (
+            name
+            and item.get("notificationType") == "telegram"
+            and str(item.get("name") or "") == name
+        ):
+            return item
     return None
+
+
+async def _best_effort_find(bot_token: str, chat_id: str, name: str) -> dict[str, Any] | None:
+    try:
+        return await _find_existing_telegram_notification(bot_token, chat_id, name)
+    except Exception as exc:  # noqa: BLE001 - listing is best-effort
+        log.warning("could not list Dokploy notifications: {}", exc)
+        return None
 
 
 async def add_telegram_notification() -> dict[str, Any]:
     bot_token, chat_id = _telegram_credentials()
-    existing = await _find_existing_telegram_notification(bot_token, chat_id)
+
+    existing = await _best_effort_find(bot_token, chat_id, "")
     if existing is not None:
         return {"notification": existing, "created": False}
+
     name = await get_bot_name()
-    await create_telegram_notification(_notification_payload(bot_token, chat_id, name))
-    found = await _find_existing_telegram_notification(bot_token, chat_id)
+
+    existing = await _best_effort_find(bot_token, chat_id, name)
+    if existing is not None:
+        return {"notification": existing, "created": False}
+
+    try:
+        await create_telegram_notification(_notification_payload(bot_token, chat_id, name))
+    except DokployAPIError:
+        raise
+    except Exception:  # noqa: BLE001 - a failed response may still mean it was created
+        found = await _best_effort_find(bot_token, chat_id, name)
+        if found is not None:
+            return {"notification": found, "created": True}
+        return {
+            "notification": {
+                "name": name,
+                "notificationId": "",
+                "notificationType": "telegram",
+            },
+            "created": True,
+            "listed": False,
+        }
+
+    found = await _best_effort_find(bot_token, chat_id, name)
     if found is None:
-        raise DokployAPIError(
-            status=400,
-            message=(
-                "Notification was created but could not be listed; "
-                "make sure the Dokploy API key has notification read permission."
-            ),
-        )
+        return {
+            "notification": {
+                "name": name,
+                "notificationId": "",
+                "notificationType": "telegram",
+            },
+            "created": True,
+            "listed": False,
+        }
     return {"notification": found, "created": True}
 
 
@@ -126,7 +169,10 @@ async def delete_telegram_notification(
     if notification_id:
         return await remove_notification(notification_id)
     bot_token, chat_id = _telegram_credentials()
-    existing = await _find_existing_telegram_notification(bot_token, chat_id)
+    existing = await _best_effort_find(bot_token, chat_id, "")
+    if existing is None:
+        name = await get_bot_name()
+        existing = await _best_effort_find(bot_token, chat_id, name)
     if existing is None:
         raise DokployAPIError(
             status=404,
