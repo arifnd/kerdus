@@ -138,10 +138,19 @@ async def delete_telegram_notification(
     return await remove_notification(str(existing.get("notificationId") or ""))
 
 
+def _error_text(exc: Exception) -> str:
+    if isinstance(exc, DokployAPIError):
+        return exc.message or str(exc)
+    return str(exc)
+
+
 async def test_telegram_notification() -> dict[str, Any]:
     bot_token, chat_id = _telegram_credentials()
-    sent = await test_telegram_connection(bot_token, chat_id)
-    return {"sent": sent, "chat_id": chat_id}
+    try:
+        await test_telegram_connection(bot_token, chat_id)
+    except Exception as exc:  # noqa: BLE001 - surface send failures in the reply
+        return {"sent": False, "chat_id": chat_id, "error": _error_text(exc)}
+    return {"sent": True, "chat_id": chat_id, "error": ""}
 
 
 def build_dokploy_tools() -> list[LocalTool]:

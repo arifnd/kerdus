@@ -284,12 +284,16 @@ def test_render_notification_delete() -> None:
     )
 
 
-def test_render_notification_test() -> None:
-    assert render_notification_test({"sent": True, "chat_id": "42"}) == (
-        "Test message sent to Telegram chat 42."
-    )
-    assert render_notification_test({"sent": False, "chat_id": "42"}) == (
-        "Could not send the test message to Telegram chat 42."
+def test_render_notification_test_success_is_silent() -> None:
+    assert render_notification_test({"sent": True, "chat_id": "42", "error": ""}) == ""
+
+
+def test_render_notification_test_failure() -> None:
+    assert render_notification_test(
+        {"sent": False, "chat_id": "42", "error": "Error testing the notification"}
+    ) == (
+        "Could not send the test Telegram message to chat 42.\n"
+        "Error: Error testing the notification"
     )
 
 
@@ -413,5 +417,20 @@ async def test_test_telegram_notification(monkeypatch) -> None:
 
     monkeypatch.setattr(dokploy_tools, "test_telegram_connection", _test_connection)
     result = await dokploy_tools.test_telegram_notification()
-    assert result == {"sent": True, "chat_id": "42"}
+    assert result == {"sent": True, "chat_id": "42", "error": ""}
     assert captured == [("123456:SUPER_SECRET", "42", "")]
+
+
+async def test_test_telegram_notification_failure_reports_error(monkeypatch) -> None:
+    _env_telegram(monkeypatch)
+
+    async def _test_connection(bot_token: str, chat_id: str, message_thread_id: str = "") -> bool:
+        raise dokploy_tools.DokployAPIError(status=400, message="Error testing the notification")
+
+    monkeypatch.setattr(dokploy_tools, "test_telegram_connection", _test_connection)
+    result = await dokploy_tools.test_telegram_notification()
+    assert result == {
+        "sent": False,
+        "chat_id": "42",
+        "error": "Error testing the notification",
+    }

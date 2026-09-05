@@ -235,6 +235,10 @@ def render_notification_delete(result: dict[str, Any]) -> str:
 
 
 def render_notification_test(result: dict[str, Any]) -> str:
-    sent = bool(result.get("sent")) if isinstance(result, dict) else False
-    chat_id = _str(result.get("chat_id")) if isinstance(result, dict) else ""
-    return _render("notification_test.html", sent=sent, chat_id=chat_id)
+    if not isinstance(result, dict) or result.get("sent"):
+        return ""
+    return _render(
+        "notification_test.html",
+        chat_id=_str(result.get("chat_id")),
+        error=_str(result.get("error")),
+    )

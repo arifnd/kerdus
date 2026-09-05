@@ -19,6 +19,10 @@ class FakeSentMessage:
         self._replies[-1] = text
         self.text = text
 
+    async def delete(self) -> None:
+        if self._replies:
+            self._replies.pop()
+
 
 class FakeMessage:
     def __init__(self, text: str, chat_id: int, replies: list[str]) -> None:
@@ -149,6 +153,29 @@ class TestTelegramBotAuthorization:
         msg = FakeMessage("hello", 999, replies)
         await bot._on_message(FakeUpdate(FakeUser(111), msg), None)
         assert replies == ["<code>x</code>"]
+
+    async def test_empty_reply_sends_nothing(self) -> None:
+        replies: list[str] = []
+
+        async def handler(text: str) -> AgentReply:
+            return AgentReply("", raw_html=True)
+
+        bot = make_bot(111, handler)
+        msg = FakeMessage("hello", 999, replies)
+        await bot._on_message(FakeUpdate(FakeUser(111), msg), None)
+        assert replies == []
+
+    async def test_empty_reply_deletes_placeholder(self) -> None:
+        replies: list[str] = []
+
+        async def handler(text: str) -> AgentReply:
+            return AgentReply("  ", raw_html=True)
+
+        bot = make_bot(111, handler)
+        bot.set_processing_hint(True)
+        msg = FakeMessage("hello", 999, replies)
+        await bot._on_message(FakeUpdate(FakeUser(111), msg), None)
+        assert replies == []
 
 
 class TestTelegramBotMisc:

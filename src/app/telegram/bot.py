@@ -65,6 +65,14 @@ class TelegramBot:
 
             reply = await self._handle_message(message.text)
 
+            if not reply.text.strip():
+                if placeholder_msg:
+                    try:
+                        await placeholder_msg.delete()
+                    except Exception as exc:  # noqa: BLE001 - best-effort cleanup
+                        log.debug("failed to delete placeholder: {}", exc)
+                return
+
             if reply.raw_html:
                 if placeholder_msg:
                     await _send_raw_html(placeholder_msg.edit_text, reply.text)

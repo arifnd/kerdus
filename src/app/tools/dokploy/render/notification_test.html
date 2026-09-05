@@ -1,1 +1,2 @@
-{% if sent %}Test message sent to Telegram chat {{ chat_id }}.{% else %}Could not send the test message to Telegram chat {{ chat_id }}.{% endif %}
+Could not send the test Telegram message to chat {{ chat_id }}.
+{% if error %}Error: {{ error }}{% endif %}
